@@ -335,6 +335,12 @@ find_bang_by_trigger :: proc(bangs: []Bang, trigger_with_bang: string) -> (^Bang
 	return nil, false
 }
 
+Browse_Result :: enum {
+	Back,
+	Done,
+	Failed,
+}
+
 choose_bang_from_menu :: proc(
 	bangs: []Bang,
 	runner_command: []string,
@@ -351,37 +357,35 @@ choose_bang_from_menu :: proc(
 	return find_bang_by_trigger(bangs, trigger)
 }
 
-run_selected_bang :: proc(bang: ^Bang, runner_command: []string) -> bool {
-	query, accepted := get_runner_input(runner_command, true)
-	if !accepted do return true
-	defer if len(query) > 0 do delete_string(query)
+run_selected_bang :: proc(bang: ^Bang, runner_command: []string) -> Browse_Result {
+	query, accepted := get_runner_input(runner_command)
+	if !accepted do return Browse_Result.Back
+	defer delete_string(query)
 
 	url, resolved := resolve_bang_target(bang, query)
 	if !resolved {
 		fmt.eprintfln("Could not resolve !%s", bang.trigger)
-		return false
+		return Browse_Result.Failed
 	}
 	defer delete_string(url)
 
-	return open_firefox(url)
+	if !open_firefox(url) do return Browse_Result.Failed
+	return Browse_Result.Done
 }
 
-choose_search_result :: proc(
+browse_search_results :: proc(
 	bangs: []Bang,
 	runner_command: []string,
 	query: string,
 	category: string = "",
 	subcategory: string = "",
-) -> (
-	^Bang,
-	bool,
-) {
+) -> Browse_Result {
 	results := search_bangs(bangs, query, category, subcategory)
 	defer delete(results)
 
 	if len(results) == 0 {
 		fmt.eprintfln("No bangs found for: %s", query)
-		return nil, false
+		return Browse_Result.Back
 	}
 
 	result_count := len(results)
@@ -390,67 +394,86 @@ choose_search_result :: proc(
 	menu := construct_search_menu(bangs, results[:result_count])
 	defer delete_string(menu)
 
-	return choose_bang_from_menu(bangs, runner_command, menu)
+	for {
+		bang, selected := choose_bang_from_menu(bangs, runner_command, menu)
+		if !selected do return Browse_Result.Back
+
+		result := run_selected_bang(bang, runner_command)
+		switch result {
+		case Browse_Result.Back:
+			continue
+		case Browse_Result.Done:
+			return Browse_Result.Done
+		case Browse_Result.Failed:
+			return Browse_Result.Failed
+		}
+	}
 }
 
-search_scope_and_choose :: proc(
+browse_search_scope :: proc(
 	bangs: []Bang,
 	runner_command: []string,
 	category: string = "",
 	subcategory: string = "",
-) -> (
-	^Bang,
-	bool,
-) {
-	query, entered := get_runner_input(runner_command)
-	if !entered do return nil, false
-	defer delete_string(query)
+) -> Browse_Result {
+	for {
+		query, entered := get_runner_input(runner_command)
+		if !entered do return Browse_Result.Back
 
-	return choose_search_result(bangs, runner_command, query, category, subcategory)
+		result := browse_search_results(bangs, runner_command, query, category, subcategory)
+		delete_string(query)
+
+		switch result {
+		case Browse_Result.Back:
+			continue
+		case Browse_Result.Done:
+			return Browse_Result.Done
+		case Browse_Result.Failed:
+			return Browse_Result.Failed
+		}
+	}
 }
 
-choose_bang_in_scope :: proc(
+browse_bang_scope :: proc(
 	bangs: []Bang,
 	runner_command: []string,
 	category: string = "",
 	subcategory: string = "",
-) -> (
-	^Bang,
-	bool,
-) {
+) -> Browse_Result {
 	rows := collect_bang_rows(bangs, category, subcategory)
 	defer delete(rows)
 
-	if len(rows) == 0 do return nil, false
-	if len(rows) > BROWSE_DIRECT_LIST_LIMIT do return search_scope_and_choose(bangs, runner_command, category, subcategory)
+	if len(rows) == 0 do return Browse_Result.Back
+	if len(rows) > BROWSE_DIRECT_LIST_LIMIT do return browse_search_scope(bangs, runner_command, category, subcategory)
 
 	menu := construct_bang_rows_menu(bangs, rows[:])
 	defer delete_string(menu)
 
-	return choose_bang_from_menu(bangs, runner_command, menu)
+	for {
+		bang, selected := choose_bang_from_menu(bangs, runner_command, menu)
+		if !selected do return Browse_Result.Back
+
+		result := run_selected_bang(bang, runner_command)
+		switch result {
+		case Browse_Result.Back:
+			continue
+		case Browse_Result.Done:
+			return Browse_Result.Done
+		case Browse_Result.Failed:
+			return Browse_Result.Failed
+		}
+	}
 }
 
-browse_search_all :: proc(db: ^Bang_DB, runner_command: []string) -> bool {
-	bang, selected := search_scope_and_choose(db.data[:], runner_command)
-	if !selected do return true
-	return run_selected_bang(bang, runner_command)
+browse_search_all :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_Result {
+	return browse_search_scope(db.data[:], runner_command)
 }
 
-browse_categories :: proc(db: ^Bang_DB, runner_command: []string) -> bool {
-	categories := collect_categories(db.data[:])
-	defer delete(categories)
-	if len(categories) == 0 do return true
-
-	category_menu := construct_category_menu(categories[:])
-	defer delete_string(category_menu)
-
-	category_selection, selected := get_runner_choice(runner_command, category_menu)
-	if !selected do return true
-	defer delete_string(category_selection)
-
-	category := menu_first_field(category_selection)
-	if len(category) == 0 do return true
-
+browse_category :: proc(
+	db: ^Bang_DB,
+	runner_command: []string,
+	category: string,
+) -> Browse_Result {
 	subcategories := collect_subcategories(db.data[:], category)
 	defer delete(subcategories)
 
@@ -463,42 +486,97 @@ browse_categories :: proc(db: ^Bang_DB, runner_command: []string) -> bool {
 	subcategory_menu := fmt.aprintf("%s", strings.to_string(builder))
 	defer delete_string(subcategory_menu)
 
-	subcategory_selection, sub_selected := get_runner_choice(runner_command, subcategory_menu)
-	if !sub_selected do return true
-	defer delete_string(subcategory_selection)
+	for {
+		selection, selected := get_runner_choice(runner_command, subcategory_menu)
+		if !selected do return Browse_Result.Back
 
-	subcategory := menu_first_field(subcategory_selection)
-	if subcategory == BROWSE_SEARCH_CATEGORY {
-		bang, found := search_scope_and_choose(db.data[:], runner_command, category)
-		if !found do return true
-		return run_selected_bang(bang, runner_command)
+		subcategory := menu_first_field(selection)
+		if len(subcategory) == 0 {
+			delete_string(selection)
+			continue
+		}
+
+		result: Browse_Result
+		if subcategory == BROWSE_SEARCH_CATEGORY {
+			result = browse_search_scope(db.data[:], runner_command, category)
+		} else {
+			result = browse_bang_scope(db.data[:], runner_command, category, subcategory)
+		}
+		delete_string(selection)
+
+		switch result {
+		case Browse_Result.Back:
+			continue
+		case Browse_Result.Done:
+			return Browse_Result.Done
+		case Browse_Result.Failed:
+			return Browse_Result.Failed
+		}
 	}
-
-	bang, found := choose_bang_in_scope(db.data[:], runner_command, category, subcategory)
-	if !found do return true
-
-	return run_selected_bang(bang, runner_command)
 }
 
-browse_subcategories :: proc(db: ^Bang_DB, runner_command: []string) -> bool {
+browse_categories :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_Result {
+	categories := collect_categories(db.data[:])
+	defer delete(categories)
+	if len(categories) == 0 do return Browse_Result.Back
+
+	category_menu := construct_category_menu(categories[:])
+	defer delete_string(category_menu)
+
+	for {
+		selection, selected := get_runner_choice(runner_command, category_menu)
+		if !selected do return Browse_Result.Back
+
+		category := menu_first_field(selection)
+		if len(category) == 0 {
+			delete_string(selection)
+			continue
+		}
+
+		result := browse_category(db, runner_command, category)
+		delete_string(selection)
+
+		switch result {
+		case Browse_Result.Back:
+			continue
+		case Browse_Result.Done:
+			return Browse_Result.Done
+		case Browse_Result.Failed:
+			return Browse_Result.Failed
+		}
+	}
+}
+
+browse_subcategories :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_Result {
 	subcategories := collect_subcategories(db.data[:])
 	defer delete(subcategories)
-	if len(subcategories) == 0 do return true
+	if len(subcategories) == 0 do return Browse_Result.Back
 
 	menu := construct_subcategory_menu(subcategories[:], true)
 	defer delete_string(menu)
 
-	selection, selected := get_runner_choice(runner_command, menu)
-	if !selected do return true
-	defer delete_string(selection)
+	for {
+		selection, selected := get_runner_choice(runner_command, menu)
+		if !selected do return Browse_Result.Back
 
-	subcategory, category, parsed := menu_first_two_fields(selection)
-	if !parsed do return true
+		subcategory, category, parsed := menu_first_two_fields(selection)
+		if !parsed {
+			delete_string(selection)
+			continue
+		}
 
-	bang, found := choose_bang_in_scope(db.data[:], runner_command, category, subcategory)
-	if !found do return true
+		result := browse_bang_scope(db.data[:], runner_command, category, subcategory)
+		delete_string(selection)
 
-	return run_selected_bang(bang, runner_command)
+		switch result {
+		case Browse_Result.Back:
+			continue
+		case Browse_Result.Done:
+			return Browse_Result.Done
+		case Browse_Result.Failed:
+			return Browse_Result.Failed
+		}
+	}
 }
 
 browse_bangs :: proc(db: ^Bang_DB, runner_command: []string) -> bool {
@@ -510,19 +588,36 @@ browse_bangs :: proc(db: ^Bang_DB, runner_command: []string) -> bool {
 		BROWSE_SUBCATEGORIES +
 		"\tsubcategory > bang\n"
 
-	selection, selected := get_runner_choice(runner_command, root_menu)
-	if !selected do return true
-	defer delete_string(selection)
+	for {
+		selection, selected := get_runner_choice(runner_command, root_menu)
 
-	mode := menu_first_field(selection)
-	switch mode {
-	case BROWSE_SEARCH_ALL:
-		return browse_search_all(db, runner_command)
-	case BROWSE_CATEGORIES:
-		return browse_categories(db, runner_command)
-	case BROWSE_SUBCATEGORIES:
-		return browse_subcategories(db, runner_command)
+		if !selected do return true
+
+		mode := menu_first_field(selection)
+		result := Browse_Result.Back
+		valid_mode := true
+
+		switch mode {
+		case BROWSE_SEARCH_ALL:
+			result = browse_search_all(db, runner_command)
+		case BROWSE_CATEGORIES:
+			result = browse_categories(db, runner_command)
+		case BROWSE_SUBCATEGORIES:
+			result = browse_subcategories(db, runner_command)
+		case:
+			valid_mode = false
+		}
+
+		delete_string(selection)
+		if !valid_mode do continue
+
+		switch result {
+		case Browse_Result.Back:
+			continue
+		case Browse_Result.Done:
+			return true
+		case Browse_Result.Failed:
+			return false
+		}
 	}
-
-	return true
 }

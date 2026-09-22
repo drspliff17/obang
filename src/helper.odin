@@ -29,7 +29,6 @@ open_firefox :: proc(url: string, new_tab: bool = false) -> bool {
 		fmt.eprintfln("Failed to start Firefox: %v", start_err)
 		return false
 	}
-
 	return true
 }
 
@@ -39,12 +38,10 @@ run_command :: proc(command: []string) -> bool {
 		os.Process_Desc{command = command},
 		context.allocator,
 	)
-
 	defer {
 		delete(stdout)
 		delete(stderr)
 	}
-
 	if err != nil {
 		fmt.eprintfln("Failed to start command: %v", err)
 		return false
