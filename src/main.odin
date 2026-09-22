@@ -90,10 +90,11 @@ main :: proc() {
 		browse_bangs(&db, a)
 		return
 
-	case "test":
+	case "-n", "count":
 		db := Bang_DB{}
 		if !load_bang_db(&db) do return
-		fmt.printfln("Loaded %d bangs", len(db.data))
+		defer db_destroy(&db)
+		fmt.printfln("Total: %d bangs", len(db.data))
 		return
 
 	case "-u", "update", "--update":
