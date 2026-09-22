@@ -48,6 +48,7 @@ Bang_DB_Header :: struct {
 	schema_version: int,
 }
 
+// Free all heap-owned fields within given bang
 bang_free :: proc(b: ^Bang) {
 	if len(b.name) > 0 do delete_string(b.name)
 	if len(b.template) > 0 do delete_string(b.template)
@@ -65,12 +66,15 @@ bang_free :: proc(b: ^Bang) {
 	delete(b.format)
 }
 
+// Free all heap-owned data in a loaded bang database
 db_destroy :: proc(db: ^Bang_DB) {
 	if len(db.timestamp) > 0 do delete_string(db.timestamp)
 	for &b in db.data do bang_free(&b)
 	delete(db.data)
 }
 
+// Clone or update the Kagi bangs repository, normalize it's bang data,
+// and rebuild the local json cache
 update_kagi_bangs :: proc() -> bool {
 	cache_dir, repo_dir, source_file, output_file, paths_ok := get_main_paths()
 	if !paths_ok do return false
@@ -181,6 +185,7 @@ update_kagi_bangs :: proc() -> bool {
 	return true
 }
 
+// Load the cached bang database, rebuilding it when the cache schema version no longer matches current schema (or is missing)
 load_bang_db :: proc(db: ^Bang_DB) -> bool {
 	home_dir, home_ok := get_path_home()
 	if !home_ok do return false
@@ -227,18 +232,22 @@ load_bang_db :: proc(db: ^Bang_DB) -> bool {
 	return true
 }
 
+// Return whether a bang supports a given format flag
 bang_has_format :: proc(bang: ^Bang, flag: string) -> bool {
 	if bang.format == nil do return true
 	for value in bang.format do if value == flag do return true
 	return false
 }
 
+// Return whether a trigger matches either the bang's primary trigger, or one of it's aliases
 bang_matches_trigger :: proc(bang: ^Bang, trigger: string) -> bool {
 	if bang.trigger == trigger do return true
 	for alias in bang.triggers do if alias == trigger do return true
 	return false
 }
 
+// Replace all occurences in an owned string, while preserving ownership of the returned
+// value, and freeing the previous allocation when replacement occurs
 replace_owned :: proc(value, old, new: string) -> string {
 	replaced, allocated := strings.replace_all(value, old, new, context.allocator)
 	if allocated {
@@ -248,6 +257,8 @@ replace_owned :: proc(value, old, new: string) -> string {
 	return value
 }
 
+// Encode query for {{{s}}} placeholder, accordsing to bang's format flags
+// Including optional space-to-plus conversion
 encode_query_placeholder :: proc(bang: ^Bang, query: string) -> string {
 	if !bang_has_format(bang, "url_encode_placeholder") do return fmt.aprintf("%s", query)
 
@@ -263,6 +274,7 @@ encode_query_placeholder :: proc(bang: ^Bang, query: string) -> string {
 	return encoded
 }
 
+// Find the highest numbered $N placeholder present in template
 highest_dollar_placeholder :: proc(template: string) -> int {
 	highest := 0
 	i := 0
@@ -294,6 +306,8 @@ highest_dollar_placeholder :: proc(template: string) -> int {
 	return highest
 }
 
+// Replace ordinary $N placeholders using whitespace-separated query parts, with the
+// final placeholder receiving the remaining query text
 replace_default_dollar_placeholders :: proc(template, query: string) -> string {
 	result := fmt.aprintf("%s", template)
 	placeholder_count := highest_dollar_placeholder(template)
@@ -323,6 +337,8 @@ replace_default_dollar_placeholders :: proc(template, query: string) -> string {
 	return result
 }
 
+// Match a query against a bang regex and replace $N placeholders with the
+// corresponding capture groups
 replace_regex_dollar_placeholders :: proc(
 	template, query, pattern: string,
 ) -> (
@@ -352,6 +368,7 @@ replace_regex_dollar_placeholders :: proc(
 	return result, true
 }
 
+// Convert protocol-relative or domain-relative resolved url into absolute url
 finalize_bang_url :: proc(bang: ^Bang, url: string) -> string {
 	if strings.has_prefix(url, "//") {
 		absolute := fmt.aprintf("https:%s", url)
@@ -368,6 +385,8 @@ finalize_bang_url :: proc(bang: ^Bang, url: string) -> string {
 	return url
 }
 
+// Resolve a query against a single bang, applying regex/default placeholders, query encoding rules,
+// empty query behaviour, and url finalization
 resolve_bang_target :: proc(bang: ^Bang, input_query: string) -> (url: string, ok: bool) {
 	query := strings.trim_space(input_query)
 
@@ -397,6 +416,7 @@ resolve_bang_target :: proc(bang: ^Bang, input_query: string) -> (url: string, o
 	return finalize_bang_url(bang, resolved), true
 }
 
+// Resolve a simple {{{s}}} search template using percent-encoding, with spaces converted to +
 resolve_template :: proc(template, query: string) -> string {
 	encoded_query := net.percent_encode(query, context.allocator)
 	with_pluses, allocated := strings.replace_all(encoded_query, "%20", "+", context.allocator)
@@ -410,6 +430,7 @@ resolve_template :: proc(template, query: string) -> string {
 	return replace_owned(result, "{{{s}}}", encoded_query)
 }
 
+// Parse a full bang query, find the matching bang by trigger, or alias, and resolve it to it's final url
 resolve_bang :: proc(bangs: []Bang, input_query: string) -> (url: string, found: bool) {
 	input := strings.trim_space(input_query)
 	if len(input) < 2 || input[0] != '!' do return "", false
