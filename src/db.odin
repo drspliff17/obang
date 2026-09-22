@@ -48,6 +48,29 @@ Bang_DB_Header :: struct {
 	schema_version: int,
 }
 
+bang_free :: proc(b: ^Bang) {
+	if len(b.name) > 0 do delete_string(b.name)
+	if len(b.template) > 0 do delete_string(b.template)
+	if len(b.trigger) > 0 do delete_string(b.trigger)
+	if len(b.snap_domain) > 0 do delete_string(b.snap_domain)
+	if len(b.category) > 0 do delete_string(b.category)
+	if len(b.domain) > 0 do delete_string(b.domain)
+	if len(b.regex_pattern) > 0 do delete_string(b.regex_pattern)
+	if len(b.subcategory) > 0 do delete_string(b.subcategory)
+
+	for x in b.triggers do delete_string(x)
+	delete(b.triggers)
+
+	for x in b.format do delete_string(x)
+	delete(b.format)
+}
+
+db_destroy :: proc(db: ^Bang_DB) {
+	if len(db.timestamp) > 0 do delete_string(db.timestamp)
+	for &b in db.data do bang_free(&b)
+	delete(db.data)
+}
+
 update_kagi_bangs :: proc() -> bool {
 	cache_dir, repo_dir, source_file, output_file, paths_ok := get_main_paths()
 	if !paths_ok do return false
@@ -171,7 +194,9 @@ load_bang_db :: proc(db: ^Bang_DB) -> bool {
 	if !output_ok do return false
 	defer delete_string(output_file)
 
-	if !os.exists(output_file) do if !update_kagi_bangs() do return false
+	if !os.exists(output_file) {
+		if !update_kagi_bangs() do return false
+	}
 
 	bytes, read_err := os.read_entire_file(output_file, context.allocator)
 	if read_err != nil {
@@ -203,7 +228,6 @@ load_bang_db :: proc(db: ^Bang_DB) -> bool {
 }
 
 bang_has_format :: proc(bang: ^Bang, flag: string) -> bool {
-	// Kagi's default is all format flags enabled when fmt is absent
 	if bang.format == nil do return true
 	for value in bang.format do if value == flag do return true
 	return false
@@ -313,14 +337,12 @@ replace_regex_dollar_placeholders :: proc(
 	defer regex.destroy_regex(compiled)
 
 	capture, matched := regex.match_and_allocate_capture(compiled, query)
-	if !matched {
-		return "", false
-	}
+	if !matched do return "", false
 	defer regex.destroy_capture(capture)
 
 	result := fmt.aprintf("%s", template)
 
-	// groups[0] is the full match. $1 starts at groups[1].
+	// groups[0] is the full match. $1 starts at groups[1]
 	for index := len(capture.groups) - 1; index >= 1; index -= 1 {
 		marker := fmt.aprintf("$%d", index)
 		result = replace_owned(result, marker, capture.groups[index])

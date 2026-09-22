@@ -4,6 +4,36 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
+
+//TODO: Replace this with something better
+print_help :: proc() {
+	fmt.println("obang")
+	fmt.println("")
+	fmt.println("  obang cmd [tab] !bang [query ...]")
+	fmt.println("  obang runner <runner command ...>")
+	fmt.println("  obang browse <runner command ...>")
+	fmt.println("  obang update")
+	fmt.println("")
+	fmt.println("Examples:")
+	fmt.println("  obang cmd !yt odin lang")
+	fmt.println("  obang runner wofi --dmenu --prompt obang")
+	fmt.println("  obang browse wofi --dmenu --prompt obang")
+}
+
+open_firefox :: proc(url: string, new_tab: bool = false) -> bool {
+	mode := "--new-window"
+	if new_tab do mode = "--new-tab"
+
+	_, start_err := os.process_start(os.Process_Desc{command = []string{"firefox", mode, url}})
+	if start_err != nil {
+		fmt.eprintfln("Failed to start Firefox: %v", start_err)
+		return false
+	}
+
+	return true
+}
+
+
 run_command :: proc(command: []string) -> bool {
 	state, stdout, stderr, err := os.process_exec(
 		os.Process_Desc{command = command},
@@ -73,53 +103,39 @@ get_output_file :: proc(cache_dir: string) -> (output_file: string, ok: bool) {
 	return o, true
 }
 
-get_config_file :: proc() -> (config_file: string, ok: bool) {
-	h, _ := get_path_home()
-	defer delete_string(h)
-	c, config_err := os.join_path(
-		[]string{h, ".config", "obang", "config.json"},
-		context.allocator,
-	)
-	if config_err != nil {
-		fmt.eprintfln("Failed to buld config file path: %v", config_err)
-		return "", false
-	}
-	return c, true
-}
-
 get_main_paths :: proc() -> (cache_dir, repo_dir, source_file, output_file: string, ok: bool) {
-	home_dir, home_ok := get_path_home()
+	h, home_ok := get_path_home()
 	if !home_ok do return "", "", "", "", false
-	defer delete_string(home_dir)
+	defer delete_string(h)
 
-	cd, cache_ok := get_path_cache(home_dir)
+	c, cache_ok := get_path_cache(h)
 	if !cache_ok do return "", "", "", "", false
 
-	r, repo_ok := get_repo_dir(cd)
+	r, repo_ok := get_repo_dir(c)
 	if !repo_ok {
-		delete_string(cd)
+		delete_string(c)
 		return "", "", "", "", false
 	}
 
 	s, source_ok := get_source_file(r)
 	if !source_ok {
-		delete_string(cd)
+		delete_string(c)
 		delete_string(r)
 		return "", "", "", "", false
 	}
 
-	o, output_ok := get_output_file(cd)
+	o, output_ok := get_output_file(c)
 	if !output_ok {
-		delete_string(cd)
+		delete_string(c)
 		delete_string(r)
 		delete_string(s)
 		return "", "", "", "", false
 	}
 
-	return cd, r, s, o, true
+	return c, r, s, o, true
 }
 
-// Returns a string of all bang names and their triggers, separated by new lines
+// Returns a string of all bang names and their triggers, separated by new lines.
 construct_bang_trigger_list :: proc(bangs: []Bang) -> string {
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
