@@ -71,8 +71,16 @@ main :: proc() {
 
 		url, resolved := resolve_bang(db.data[:], runner_input)
 		if !resolved {
-			fmt.eprintfln("Could not resolve runner output: %s", runner_input)
+			b, ok := terminal_get_bang(db.data[:], "!g")
+			if !ok do fmt.eprintfln("Could not resolve runner output: %s", runner_input)
+
+			//TODO: Hook this default to Google Search behaviour into some config flag
+			url = resolve_template(b.template, runner_input)
+			open_firefox(url)
+			delete_string(url)
 			return
+			// fmt.eprintfln("Could not resolve runner output: %s", runner_input)
+			// return
 		}
 		defer delete_string(url)
 
