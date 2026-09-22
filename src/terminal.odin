@@ -13,14 +13,18 @@ Terminal_Search_Result :: struct {
 	name:  string,
 }
 
+// Return whether a byte is considered whitespace for terminal search matching
 terminal_query_space :: proc(c: u8) -> bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
+// Return whether a byte marks a word boundary for fuzzy name matching
 terminal_word_boundary :: proc(c: u8) -> bool {
 	return terminal_query_space(c) || c == '-' || c == '_' || c == '/' || c == '.' || c == ':'
 }
 
+// Score a bang name against a fuzzy query, heavily favouring exact, prefix, substring
+// word-boundary and consecutive character matches
 terminal_fuzzy_name_score :: proc(name, input_query: string) -> int {
 	query := strings.trim_space(input_query)
 	if len(name) == 0 || len(query) == 0 do return 0
@@ -59,6 +63,7 @@ terminal_fuzzy_name_score :: proc(name, input_query: string) -> int {
 	return score
 }
 
+// Fuzzy-search bang names and return matching results ordered by score
 terminal_search_names :: proc(bangs: []Bang, query: string) -> [dynamic]Terminal_Search_Result {
 	results := make([dynamic]Terminal_Search_Result, 0, 64)
 
@@ -80,6 +85,7 @@ terminal_search_names :: proc(bangs: []Bang, query: string) -> [dynamic]Terminal
 	return results
 }
 
+// Print a compact tab-separated summary of a bang for terminal search output
 print_terminal_bang_row :: proc(bang: ^Bang) {
 	fmt.printf("!%s\t%s", bang.trigger, bang.name)
 
@@ -91,6 +97,7 @@ print_terminal_bang_row :: proc(bang: ^Bang) {
 	fmt.println()
 }
 
+// Search bang names from the terminal, and print highest-ranked matches
 terminal_search :: proc(db: ^Bang_DB, query: string) -> bool {
 	query := query
 	query = strings.trim_space(query)
@@ -114,6 +121,7 @@ terminal_search :: proc(db: ^Bang_DB, query: string) -> bool {
 	return true
 }
 
+// Find a bang by exact primary trigger or alias, accepting optional leading !
 terminal_get_bang :: proc(bangs: []Bang, input_key: string) -> (^Bang, bool) {
 	key := strings.trim_space(input_key)
 	if len(key) > 0 && key[0] == '!' do key = key[1:]
@@ -129,6 +137,7 @@ terminal_get_bang :: proc(bangs: []Bang, input_key: string) -> (^Bang, bool) {
 	return nil, false
 }
 
+// Serialize and print a banf as pretty-formatted json
 print_bang_json :: proc(bang: ^Bang) -> bool {
 	output, marshal_err := json.marshal(
 		bang^,
@@ -145,6 +154,7 @@ print_bang_json :: proc(bang: ^Bang) -> bool {
 	return true
 }
 
+// Print a human-readable summary of all relevant fields for a bang
 print_bang_details :: proc(bang: ^Bang) {
 	fmt.printfln("Name:        %s", bang.name)
 	fmt.printfln("Trigger:     !%s", bang.trigger)
@@ -206,6 +216,7 @@ print_bang_details :: proc(bang: ^Bang) {
 	}
 }
 
+// Look up a bang by trigger or alias, and print it as either human-readable details, or json
 terminal_get :: proc(db: ^Bang_DB, key: string, json_output: bool = false) -> bool {
 	bang, found := terminal_get_bang(db.data[:], key)
 	if !found {
