@@ -137,7 +137,7 @@ terminal_get_bang :: proc(bangs: []Bang, input_key: string) -> (^Bang, bool) {
 	return nil, false
 }
 
-// Serialize and print a banf as pretty-formatted json
+// Serialize and print a bang as pretty-formatted json
 print_bang_json :: proc(bang: ^Bang) -> bool {
 	output, marshal_err := json.marshal(
 		bang^,

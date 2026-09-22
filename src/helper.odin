@@ -127,6 +127,19 @@ get_output_file :: proc(cache_dir: string) -> (output_file: string, ok: bool) {
 	return o, true
 }
 
+// Build the path to obang's config.json file
+get_config_file :: proc(home_dir: string) -> (config_file: string, ok: bool) {
+	c, config_err := os.join_path(
+		[]string{home_dir, ".config", "obang", "config.json"},
+		context.allocator,
+	)
+	if config_err != nil {
+		fmt.eprintfln("Failed to build config file path: %v", config_err)
+		return "", false
+	}
+	return c, true
+}
+
 // Resolve all filesystem paths required for updating and loading the bang database,
 // cleaning up any intermediate allocations on failure
 get_main_paths :: proc() -> (cache_dir, repo_dir, source_file, output_file: string, ok: bool) {

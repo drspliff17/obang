@@ -1,7 +1,6 @@
 package main
 
 //TODO:
-// Add comments, cleanup && formatting wherever i cocked up
 // Implement config for loading custom bangs, and defining constant runner cmds
 
 import "core:fmt"
@@ -9,6 +8,12 @@ import "core:os"
 import "core:strings"
 
 main :: proc() {
+
+	config: Config
+	if !config_init(&config) do return
+	defer config_destroy(&config)
+	context.user_ptr = cast(rawptr)&config
+
 	a := os.args[1:]
 	if len(a) == 0 {
 		print_help()
@@ -56,7 +61,7 @@ main :: proc() {
 
 	case "-r", "runner", "--runner":
 		a = a[1:]
-		if len(a) == 0 {
+		if len(a) == 0 && len(config.empty_runner_cmd) == 0 {
 			fmt.eprintln("Expected a runner command")
 			return
 		}
@@ -89,7 +94,7 @@ main :: proc() {
 
 	case "-b", "browse", "--browse":
 		a = a[1:]
-		if len(a) == 0 {
+		if len(a) == 0 && len(config.browse_runner_cmd) == 0 {
 			fmt.eprintln("Expected a runner command")
 			return
 		}
