@@ -5,6 +5,8 @@ import "core:io"
 import "core:os"
 import "core:strings"
 
+//NOTE: Menu can be closed (instead of traversing back up the tree) with -SIGINT
+
 // Opens a runner with no input list. This is useful when the runner is acting
 // purely as a text box. Set allow_empty when an empty accepted value is useful,
 // e.g. opening a bang's base/snap domain
@@ -42,6 +44,10 @@ get_runner_input :: proc(
 	if exec_err != nil {
 		fmt.eprintfln("Failed to start runner: %v", exec_err)
 		return "", false
+	}
+
+	if !state.success && state.exit_code == 2 {
+		os.exit(130)
 	}
 
 	if !state.exited || state.exit_code != 0 {
@@ -112,6 +118,11 @@ get_runner_choice :: proc(command: []string, input: string) -> (output: string, 
 	if wait_err != nil {
 		fmt.eprintfln("Failed waiting for runner: %v", wait_err)
 		return "", false
+	}
+
+	// SIGINT
+	if !state.success && state.exit_code == 2 {
+		os.exit(130)
 	}
 
 	if !state.exited || state.exit_code != 0 do return "", false
