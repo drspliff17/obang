@@ -4,9 +4,11 @@ import "core:fmt"
 import "core:slice"
 import "core:strings"
 
+// Menu Control
 BROWSE_SEARCH_LIMIT :: 60
 BROWSE_DIRECT_LIST_LIMIT :: 250
 
+// Static Menu Options
 BROWSE_SEARCH_ALL :: "Search bangs"
 BROWSE_CATEGORIES :: "Browse categories"
 BROWSE_SUBCATEGORIES :: "Browse subcategories"
@@ -35,17 +37,20 @@ Bang_Search_Result :: struct {
 	name:  string,
 }
 
+// Convert an ASCII byte to lowercase for simple case-insensitive matching
 ascii_lower_byte :: proc(c: u8) -> u8 {
 	if c >= 'A' && c <= 'Z' do return c + ('a' - 'A')
 	return c
 }
 
+// Check whether a string starts with a prefix, ignoring ASCII case
 ascii_has_prefix_fold :: proc(value, prefix: string) -> bool {
 	if len(prefix) > len(value) do return false
 	for i in 0 ..< len(prefix) do if ascii_lower_byte(value[i]) != ascii_lower_byte(prefix[i]) do return false
 	return true
 }
 
+// Check whether a string contains a substring, ignoring ASCII case
 ascii_contains_fold :: proc(value, needle: string) -> bool {
 	if len(needle) == 0 do return true
 	if len(needle) > len(value) do return false
@@ -69,6 +74,7 @@ max_int :: proc(a, b: int) -> int {
 	return b
 }
 
+// Score a field against a search term using exact, prefix and substring matches
 score_field :: proc(value, term: string, exact_score, prefix_score, contains_score: int) -> int {
 	if len(value) == 0 || len(term) == 0 do return 0
 	if strings.equal_fold(value, term) do return exact_score
@@ -77,6 +83,7 @@ score_field :: proc(value, term: string, exact_score, prefix_score, contains_sco
 	return 0
 }
 
+// Score a search term against the searchable fields of a bang
 score_bang_term :: proc(bang: ^Bang, term: string) -> int {
 	score := score_field(bang.trigger, term, 120, 105, 85)
 
@@ -90,6 +97,7 @@ score_bang_term :: proc(bang: ^Bang, term: string) -> int {
 	return score
 }
 
+// Score a complete multi-term query against a bang, rewarding exact trigger, alias, name and domain matches
 score_bang_search :: proc(bang: ^Bang, input_query: string) -> int {
 	query := strings.trim_space(input_query)
 	if len(query) == 0 do return 0
@@ -132,12 +140,14 @@ score_bang_search :: proc(bang: ^Bang, input_query: string) -> int {
 	return total
 }
 
+// Return whether a bang belongs to the requested category/subcategory scope
 bang_in_scope :: proc(bang: ^Bang, category, subcategory: string) -> bool {
 	if len(category) > 0 && bang.category != category do return false
 	if len(subcategory) > 0 && bang.subcategory != subcategory do return false
 	return true
 }
 
+// Search bangs within an optional category/subcategory scope, and return matching results ordered by relevance
 search_bangs :: proc(
 	bangs: []Bang,
 	query: string,
@@ -164,6 +174,7 @@ search_bangs :: proc(
 	return results
 }
 
+// Collect all unique categories, and the number of bangs in each
 collect_categories :: proc(bangs: []Bang) -> [dynamic]Category_Row {
 	counts := make(map[string]int)
 	defer delete(counts)
@@ -188,6 +199,7 @@ collect_categories :: proc(bangs: []Bang) -> [dynamic]Category_Row {
 	return rows
 }
 
+// Collect unique subcategories, optionally restricted to a parent category, together with their bang counts
 collect_subcategories :: proc(bangs: []Bang, category: string = "") -> [dynamic]Subcategory_Row {
 	rows := make([dynamic]Subcategory_Row, 0, 128)
 
@@ -224,6 +236,7 @@ collect_subcategories :: proc(bangs: []Bang, category: string = "") -> [dynamic]
 	return rows
 }
 
+// Collect and sort bang rows within an optional category/subcategory scope
 collect_bang_rows :: proc(
 	bangs: []Bang,
 	category: string = "",
@@ -245,6 +258,7 @@ collect_bang_rows :: proc(
 	return rows
 }
 
+// Append single formatted bang entry to a runner
 append_bang_menu_line :: proc(builder: ^strings.Builder, bang: ^Bang) {
 	fmt.sbprintf(builder, "!%s\t%s", bang.trigger, bang.name)
 	if len(bang.category) > 0 {
@@ -256,6 +270,7 @@ append_bang_menu_line :: proc(builder: ^strings.Builder, bang: ^Bang) {
 	fmt.sbprintf(builder, "\n")
 }
 
+// Build runner menu containing category name, and bang counts
 construct_category_menu :: proc(rows: []Category_Row) -> string {
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -264,6 +279,7 @@ construct_category_menu :: proc(rows: []Category_Row) -> string {
 	return fmt.aprintf("%s", strings.to_string(builder))
 }
 
+// Build runner menu containing subcategory name, and bang counts - optionally including the parent category
 construct_subcategory_menu :: proc(rows: []Subcategory_Row, include_category: bool) -> string {
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -279,6 +295,7 @@ construct_subcategory_menu :: proc(rows: []Subcategory_Row, include_category: bo
 	return fmt.aprintf("%s", strings.to_string(builder))
 }
 
+// Build runner menu from a set of bang rows
 construct_bang_rows_menu :: proc(bangs: []Bang, rows: []Bang_Row) -> string {
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -287,6 +304,7 @@ construct_bang_rows_menu :: proc(bangs: []Bang, rows: []Bang_Row) -> string {
 	return fmt.aprintf("%s", strings.to_string(builder))
 }
 
+// Build runner menu from ranked bang search results
 construct_search_menu :: proc(bangs: []Bang, results: []Bang_Search_Result) -> string {
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -295,18 +313,21 @@ construct_search_menu :: proc(bangs: []Bang, results: []Bang_Search_Result) -> s
 	return fmt.aprintf("%s", strings.to_string(builder))
 }
 
+// Extract and trim the first line returned by a runner
 menu_line :: proc(selection: string) -> string {
 	line := strings.trim_space(selection)
 	if newline := strings.index_byte(line, '\n'); newline >= 0 do line = line[:newline]
 	return strings.trim_space(line)
 }
 
+// Extract the first tab-separated fields from a runner selection
 menu_first_field :: proc(selection: string) -> string {
 	line := menu_line(selection)
 	if tab := strings.index_byte(line, '\t'); tab >= 0 do return strings.trim_space(line[:tab])
 	return line
 }
 
+// Extract the first two tab-separated from a runner selection
 menu_first_two_fields :: proc(selection: string) -> (first, second: string, ok: bool) {
 	line := menu_line(selection)
 	first_tab := strings.index_byte(line, '\t')
@@ -326,6 +347,7 @@ menu_first_two_fields :: proc(selection: string) -> (first, second: string, ok: 
 	return first, second, true
 }
 
+// Find a band bt primary trigger, or alias, accepting an optional leading !
 find_bang_by_trigger :: proc(bangs: []Bang, trigger_with_bang: string) -> (^Bang, bool) {
 	trigger := strings.trim_space(trigger_with_bang)
 	if len(trigger) > 0 && trigger[0] == '!' do trigger = trigger[1:]
@@ -341,6 +363,7 @@ Browse_Result :: enum {
 	Failed,
 }
 
+// Present a bang menu, and resolve the selected entry back into it's Bang
 choose_bang_from_menu :: proc(
 	bangs: []Bang,
 	runner_command: []string,
@@ -357,6 +380,8 @@ choose_bang_from_menu :: proc(
 	return find_bang_by_trigger(bangs, trigger)
 }
 
+// Prompt for a query, resolve the selected bang, and open the resulting URL
+// Cancelling returns Back, so the caller can restore the previous menu
 run_selected_bang :: proc(bang: ^Bang, runner_command: []string) -> Browse_Result {
 	query, accepted := get_runner_input(runner_command)
 	if !accepted do return Browse_Result.Back
@@ -373,6 +398,8 @@ run_selected_bang :: proc(bang: ^Bang, runner_command: []string) -> Browse_Resul
 	return Browse_Result.Done
 }
 
+// Present ranked rearch results and handle navigation between the result list and the
+// selected bang's query prompt
 browse_search_results :: proc(
 	bangs: []Bang,
 	runner_command: []string,
@@ -410,6 +437,8 @@ browse_search_results :: proc(
 	}
 }
 
+// Prompt for a search query within an optional scope and navigate through it's
+// results until user completes action, or goes back
 browse_search_scope :: proc(
 	bangs: []Bang,
 	runner_command: []string,
@@ -434,6 +463,8 @@ browse_search_scope :: proc(
 	}
 }
 
+// Browse bangs within an optional category/subcategory scope, falling back to scoped
+// search when the result set is too large for a direct menu
 browse_bang_scope :: proc(
 	bangs: []Bang,
 	runner_command: []string,
@@ -465,10 +496,12 @@ browse_bang_scope :: proc(
 	}
 }
 
+// Start an unrestricted bang search from the browse interface
 browse_search_all :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_Result {
 	return browse_search_scope(db.data[:], runner_command)
 }
 
+// Browse the subcategories and bangs belonging to a single category
 browse_category :: proc(
 	db: ^Bang_DB,
 	runner_command: []string,
@@ -515,6 +548,7 @@ browse_category :: proc(
 	}
 }
 
+// Browse all categories and descend into the selected category
 browse_categories :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_Result {
 	categories := collect_categories(db.data[:])
 	defer delete(categories)
@@ -547,6 +581,7 @@ browse_categories :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_Resu
 	}
 }
 
+// Browse all category/subcategory pairs and descend into the selected scope
 browse_subcategories :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_Result {
 	subcategories := collect_subcategories(db.data[:])
 	defer delete(subcategories)
@@ -579,6 +614,8 @@ browse_subcategories :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_R
 	}
 }
 
+// Run the top-level browse menu and manage navigation until the user completes
+// bang action, or closes the root menu
 browse_bangs :: proc(db: ^Bang_DB, runner_command: []string) -> bool {
 	root_menu :=
 		BROWSE_SEARCH_ALL +
