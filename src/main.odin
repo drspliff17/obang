@@ -66,6 +66,7 @@ main :: proc() {
 			return
 		}
 
+		if len(config.empty_runner_cmd) > 0 do a = config.empty_runner_cmd
 		runner_input, ok := get_runner_input(a)
 		if !ok do return
 		defer delete_string(runner_input)
@@ -94,7 +95,7 @@ main :: proc() {
 
 	case "-b", "browse", "--browse":
 		a = a[1:]
-		if len(a) == 0 && len(config.browse_runner_cmd) == 0 {
+		if len(a) == 0 && len(config.browse_root_runner_cmd) == 0 {
 			fmt.eprintln("Expected a runner command")
 			return
 		}

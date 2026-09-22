@@ -372,7 +372,9 @@ choose_bang_from_menu :: proc(
 	^Bang,
 	bool,
 ) {
-	selection, selected := get_runner_choice(runner_command, menu)
+	c := cast(^Config)context.user_ptr
+	a := len(c.browse_bang_runner_cmd) > 0 ? c.browse_bang_runner_cmd : runner_command
+	selection, selected := get_runner_choice(a, menu)
 	if !selected do return nil, false
 	defer delete_string(selection)
 
@@ -383,7 +385,9 @@ choose_bang_from_menu :: proc(
 // Prompt for a query, resolve the selected bang, and open the resulting URL
 // Cancelling returns Back, so the caller can restore the previous menu
 run_selected_bang :: proc(bang: ^Bang, runner_command: []string) -> Browse_Result {
-	query, accepted := get_runner_input(runner_command)
+	c := cast(^Config)context.user_ptr
+	a := len(c.empty_runner_cmd) > 0 ? c.empty_runner_cmd : runner_command
+	query, accepted := get_runner_input(a)
 	if !accepted do return Browse_Result.Back
 	defer delete_string(query)
 
@@ -446,7 +450,9 @@ browse_search_scope :: proc(
 	subcategory: string = "",
 ) -> Browse_Result {
 	for {
-		query, entered := get_runner_input(runner_command)
+		c := cast(^Config)context.user_ptr
+		a := len(c.empty_runner_cmd) > 0 ? c.empty_runner_cmd : runner_command
+		query, entered := get_runner_input(a)
 		if !entered do return Browse_Result.Back
 
 		result := browse_search_results(bangs, runner_command, query, category, subcategory)
@@ -507,6 +513,11 @@ browse_category :: proc(
 	runner_command: []string,
 	category: string,
 ) -> Browse_Result {
+
+	c := cast(^Config)context.user_ptr
+	a :=
+		len(c.browse_subcategory_runner_cmd) > 0 ? c.browse_subcategory_runner_cmd : runner_command
+
 	subcategories := collect_subcategories(db.data[:], category)
 	defer delete(subcategories)
 
@@ -520,7 +531,7 @@ browse_category :: proc(
 	defer delete_string(subcategory_menu)
 
 	for {
-		selection, selected := get_runner_choice(runner_command, subcategory_menu)
+		selection, selected := get_runner_choice(a, subcategory_menu)
 		if !selected do return Browse_Result.Back
 
 		subcategory := menu_first_field(selection)
@@ -557,8 +568,11 @@ browse_categories :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_Resu
 	category_menu := construct_category_menu(categories[:])
 	defer delete_string(category_menu)
 
+	c := cast(^Config)context.user_ptr
+	a := len(c.browse_category_runner_cmd) > 0 ? c.browse_category_runner_cmd : runner_command
+
 	for {
-		selection, selected := get_runner_choice(runner_command, category_menu)
+		selection, selected := get_runner_choice(a, category_menu)
 		if !selected do return Browse_Result.Back
 
 		category := menu_first_field(selection)
@@ -590,8 +604,12 @@ browse_subcategories :: proc(db: ^Bang_DB, runner_command: []string) -> Browse_R
 	menu := construct_subcategory_menu(subcategories[:], true)
 	defer delete_string(menu)
 
+	c := cast(^Config)context.user_ptr
+	a :=
+		len(c.browse_subcategory_runner_cmd) > 0 ? c.browse_subcategory_runner_cmd : runner_command
+
 	for {
-		selection, selected := get_runner_choice(runner_command, menu)
+		selection, selected := get_runner_choice(a, menu)
 		if !selected do return Browse_Result.Back
 
 		subcategory, category, parsed := menu_first_two_fields(selection)
@@ -625,8 +643,11 @@ browse_bangs :: proc(db: ^Bang_DB, runner_command: []string) -> bool {
 		BROWSE_SUBCATEGORIES +
 		"\tsubcategory > bang\n"
 
+	c := cast(^Config)context.user_ptr
+	a := len(c.browse_root_runner_cmd) > 0 ? c.browse_root_runner_cmd : runner_command
+
 	for {
-		selection, selected := get_runner_choice(runner_command, root_menu)
+		selection, selected := get_runner_choice(a, root_menu)
 
 		if !selected do return true
 

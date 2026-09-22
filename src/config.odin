@@ -9,8 +9,11 @@ Config_General :: struct {
 }
 
 Config_Runner :: struct {
-	empty_runner_cmd:  []string,
-	browse_runner_cmd: []string,
+	empty_runner_cmd:              []string,
+	browse_root_runner_cmd:        []string,
+	browse_bang_runner_cmd:        []string,
+	browse_category_runner_cmd:    []string,
+	browse_subcategory_runner_cmd: []string,
 }
 
 Config_Bangs :: struct {
@@ -27,7 +30,28 @@ config_create_default :: proc(filepath: string) {
 	default_config := Config {
 		runner_settings = {
 			empty_runner_cmd = {"wofi", "-d", "-W", "25%", "-H", "10%"},
-			browse_runner_cmd = {"wofi", "-d", "-W", "30%", "-H", "30%", "-p", "obang"},
+			browse_root_runner_cmd = {"wofi", "-d", "-p", "obang", "-d", "-W", "30%", "-L", "3"},
+			browse_bang_runner_cmd = {"wofi", "-d", "-p", "pick bang", "-W", "45%", "-H", "30%"},
+			browse_category_runner_cmd = {
+				"wofi",
+				"-d",
+				"-p",
+				"pick category",
+				"-W",
+				"30%",
+				"-H",
+				"30%",
+			},
+			browse_subcategory_runner_cmd = {
+				"wofi",
+				"-d",
+				"-p",
+				"pick subcategory",
+				"-W",
+				"30%",
+				"-H",
+				"30%",
+			},
 		},
 	}
 
@@ -49,8 +73,23 @@ config_load :: proc(c: ^Config, filepath: string) {
 }
 
 config_verify :: proc(c: ^Config) -> bool {
-	if len(c.browse_runner_cmd) == 0 {
-		fmt.eprintln("[ERROR] Config missing 'browse_runner_cmd'")
+	if len(c.browse_root_runner_cmd) == 0 {
+		fmt.eprintln("[ERROR] Config missing 'browse_root_runner_cmd'")
+		return false
+	}
+
+	if len(c.browse_bang_runner_cmd) == 0 {
+		fmt.eprintln("[ERROR] Config missing 'browse_bang_runner_cmd'")
+		return false
+	}
+
+	if len(c.browse_category_runner_cmd) == 0 {
+		fmt.eprintln("[ERROR] Config missing 'browse_category_runner_cmd'")
+		return false
+	}
+
+	if len(c.browse_subcategory_runner_cmd) == 0 {
+		fmt.eprintln("[ERROR] Config missing 'browse_subcategory_runner_cmd'")
 		return false
 	}
 
@@ -60,6 +99,7 @@ config_verify :: proc(c: ^Config) -> bool {
 	}
 
 	for x in c.bangs {
+
 		//TODO: Add proper Bang Verification here
 
 		if len(x.name) == 0 {
@@ -94,8 +134,17 @@ config_init :: proc(c: ^Config) -> bool {
 }
 
 config_destroy :: proc(c: ^Config) {
-	for x in c.browse_runner_cmd do delete_string(x)
-	delete(c.browse_runner_cmd)
+	for x in c.browse_root_runner_cmd do delete_string(x)
+	delete(c.browse_root_runner_cmd)
+
+	for x in c.browse_bang_runner_cmd do delete_string(x)
+	delete(c.browse_bang_runner_cmd)
+
+	for x in c.browse_category_runner_cmd do delete_string(x)
+	delete(c.browse_category_runner_cmd)
+
+	for x in c.browse_subcategory_runner_cmd do delete_string(x)
+	delete(c.browse_subcategory_runner_cmd)
 
 	for x in c.empty_runner_cmd do delete_string(x)
 	delete(c.empty_runner_cmd)

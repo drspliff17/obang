@@ -15,16 +15,9 @@ get_runner_input :: proc(
 	output: string,
 	ok: bool,
 ) {
-	c := cast(^Config)context.user_ptr
-	cmd: []string
-	if len(c.empty_runner_cmd) > 0 {
-		cmd = c.empty_runner_cmd
-	} else {
-		if len(command) == 0 {
-			fmt.eprintln("Runner command is empty")
-			return "", false
-		}
-		cmd = command
+	if len(command) == 0 {
+		fmt.eprintln("Runner command is empty")
+		return "", false
 	}
 
 	stdin_read, stdin_write, pipe_err := os.pipe()
@@ -37,7 +30,7 @@ get_runner_input :: proc(
 	defer os.close(stdin_read)
 
 	state, stdout, stderr, exec_err := os.process_exec(
-		os.Process_Desc{command = cmd, stdin = stdin_read},
+		os.Process_Desc{command = command, stdin = stdin_read},
 		context.allocator,
 	)
 
@@ -69,16 +62,9 @@ get_runner_input :: proc(
 // line from stdout. This is deliberately generic; command can be wofi, rofi,
 // fuzzel, or anything else that speaks stdin/stdout in the same way
 get_runner_choice :: proc(command: []string, input: string) -> (output: string, ok: bool) {
-	c := cast(^Config)context.user_ptr
-	cmd: []string
-	if len(c.browse_runner_cmd) > 0 {
-		cmd = c.browse_runner_cmd
-	} else {
-		if len(command) == 0 {
-			fmt.eprintln("Runner command is empty")
-			return "", false
-		}
-		cmd = command
+	if len(command) == 0 {
+		fmt.eprintln("Runner command is empty")
+		return "", false
 	}
 
 	stdin_read, stdin_write, stdin_err := os.pipe()
@@ -97,7 +83,7 @@ get_runner_choice :: proc(command: []string, input: string) -> (output: string, 
 
 	process, start_err := os.process_start(
 		os.Process_Desc {
-			command = cmd,
+			command = command,
 			stdin = stdin_read,
 			stdout = stdout_write,
 			stderr = os.stderr,
