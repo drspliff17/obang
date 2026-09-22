@@ -73,30 +73,50 @@ get_output_file :: proc(cache_dir: string) -> (output_file: string, ok: bool) {
 	return o, true
 }
 
-get_main_paths :: proc() -> (cache_dir, repo_dir, source_file, output_file: string) {
-	h, _ := get_path_home()
-	defer delete_string(h)
+get_main_paths :: proc() -> (cache_dir, repo_dir, source_file, output_file: string, ok: bool) {
+	home_dir, home_ok := get_path_home()
+	if !home_ok do return "", "", "", "", false
+	defer delete_string(home_dir)
 
-	c, _ := get_path_cache(h)
-	r, _ := get_repo_dir(c)
-	s, _ := get_source_file(r)
-	o, _ := get_output_file(c)
+	cd, cache_ok := get_path_cache(home_dir)
+	if !cache_ok do return "", "", "", "", false
 
-	return c, r, s, o
+	r, repo_ok := get_repo_dir(cd)
+	if !repo_ok {
+		delete_string(cd)
+		return "", "", "", "", false
+	}
+
+	s, source_ok := get_source_file(r)
+	if !source_ok {
+		delete_string(cd)
+		delete_string(r)
+		return "", "", "", "", false
+	}
+
+	o, output_ok := get_output_file(cd)
+	if !output_ok {
+		delete_string(cd)
+		delete_string(r)
+		delete_string(s)
+		return "", "", "", "", false
+	}
+
+	return cd, r, s, o, true
 }
 
-// Returns a string of all bang names, separated by new lines
-construct_bang_trigger_list :: proc(b: []Bang) -> string {
-	n := make([dynamic]string)
-	defer {
-		for s in n do delete_string(s)
-		delete(n)
+// Returns a string of all bang names and their triggers, separated by new lines
+construct_bang_trigger_list :: proc(bangs: []Bang) -> string {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+
+	for bang in bangs {
+		fmt.sbprintf(&builder, "%s - [%s", bang.name, bang.trigger)
+		for alias in bang.triggers {
+			fmt.sbprintf(&builder, ", %s", alias)
+		}
+		fmt.sbprintf(&builder, "]\n")
 	}
 
-	for x in b {
-		s := fmt.aprintf("%s - %v", x.name, x.triggers)
-		append(&n, s)
-	}
-
-	return strings.join(n[:], "\n", context.allocator)
+	return fmt.aprintf("%s", strings.to_string(builder))
 }

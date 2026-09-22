@@ -15,32 +15,42 @@ parse_arguments :: proc() -> bool {
 		switch a[0] {
 		case "-c", "cmd", "--command":
 			a = a[1:]
-			if len(a) < 2 {
-				fmt.eprintfln("Expected bang and query to resolve")
+			if len(a) == 0 {
+				fmt.eprintln("Expected a bang to resolve")
 				return false
 			}
 
-			fox_type: string
-			switch a[0] {
-			case "-t", "tab":
+			fox_type := "--new-window"
+			if a[0] == "-t" || a[0] == "tab" {
 				fox_type = "--new-tab"
 				a = a[1:]
-			case:
-				fox_type = "--new-window"
+				if len(a) == 0 {
+					fmt.eprintln("Expected a bang after tab option")
+					return false
+				}
 			}
 
 			db := Bang_DB{}
 			if !load_bang_db(&db) do return false
 
-			s := strings.join(a[:], " ")
-			defer delete_string(s)
+			input := strings.join(a[:], " ")
+			defer delete_string(input)
 
-			url, ok := resolve_bang(db.data[:], s)
+			url, ok := resolve_bang(db.data[:], input)
 			if !ok {
-				fmt.eprintfln("Could not find bang: %s", a[0])
+				fmt.eprintfln("Could not resolve bang: %s", a[0])
 				return false
 			}
-			_, _ = os.process_start(os.Process_Desc{command = []string{"firefox", fox_type, url}})
+			defer delete_string(url)
+
+			_, start_err := os.process_start(
+				os.Process_Desc{command = []string{"firefox", fox_type, url}},
+			)
+			if start_err != nil {
+				fmt.eprintfln("Failed to start Firefox: %v", start_err)
+				return false
+			}
+
 			return true
 
 		case "test":
@@ -51,8 +61,7 @@ parse_arguments :: proc() -> bool {
 			str := construct_bang_trigger_list(db.data[:])
 			defer if len(str) > 0 do delete_string(str)
 
-			fmt.printfln(str)
-
+			fmt.println(str)
 			return true
 
 		case "-u", "update", "--update":
