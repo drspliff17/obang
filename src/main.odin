@@ -158,13 +158,17 @@ main :: proc() {
 	case "completions":
 		a = a[1:]
 		if len(a) == 0 {
-			fmt.eprintln("Expected a shell name")
+			fmt.eprintln("Expected a shell name - Supported: fish, bash, zsh")
 			return
 		}
 
 		switch a[0] {
 		case "fish":
 			print_fish_completions()
+		case "bash":
+			print_bash_completions()
+		case "zsh":
+			print_zsh_completions()
 		case:
 			fmt.eprintfln("Unsupported shell: %s", a[0])
 		}
