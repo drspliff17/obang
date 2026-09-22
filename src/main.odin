@@ -1,11 +1,14 @@
 package main
 
+//TODO:
+// Add comments, cleanup && formatting wherever i cocked up
+// Implement config for loading custom bangs, and defining constant runner cmds
+
 import "core:fmt"
 import "core:os"
 import "core:strings"
 
 main :: proc() {
-
 	a := os.args[1:]
 	if len(a) == 0 {
 		print_help()
@@ -90,6 +93,49 @@ main :: proc() {
 		browse_bangs(&db, a)
 		return
 
+	case "-s", "search", "--search":
+		a = a[1:]
+		if len(a) == 0 {
+			fmt.eprintln("Expected a bang name to search for")
+			return
+		}
+
+		query := strings.join(a, " ")
+		defer delete_string(query)
+
+		db := Bang_DB{}
+		if !load_bang_db(&db) do return
+		defer db_destroy(&db)
+
+		terminal_search(&db, query)
+		return
+
+	case "-g", "get", "--get":
+		a = a[1:]
+		if len(a) == 0 {
+			fmt.eprintln("Expected a bang trigger or alias")
+			return
+		}
+
+		json_output := false
+
+		if a[0] == "-j" || a[0] == "--json" {
+			json_output = true
+			a = a[1:]
+
+			if len(a) == 0 {
+				fmt.eprintln("Expected a bang trigger or alias")
+				return
+			}
+		}
+
+		db := Bang_DB{}
+		if !load_bang_db(&db) do return
+		defer db_destroy(&db)
+
+		terminal_get(&db, a[0], json_output)
+		return
+
 	case "-n", "count":
 		db := Bang_DB{}
 		if !load_bang_db(&db) do return
@@ -101,9 +147,34 @@ main :: proc() {
 		update_kagi_bangs()
 		return
 
+	case "completions":
+		a = a[1:]
+		if len(a) == 0 {
+			fmt.eprintln("Expected a shell name")
+			return
+		}
+
+		switch a[0] {
+		case "fish":
+			print_fish_completions()
+		case:
+			fmt.eprintfln("Unsupported shell: %s", a[0])
+		}
+		return
+
+	case "__complete-bangs":
+		prefix := ""
+		if len(a) > 1 do prefix = a[1]
+
+		db := Bang_DB{}
+		if !load_bang_db(&db) do return
+		defer db_destroy(&db)
+
+		print_bang_completions(db.data[:], prefix)
+		return
+
 	case:
 		fmt.eprintfln("Invalid argument provided: %s", a[0])
 		return
 	}
-
 }

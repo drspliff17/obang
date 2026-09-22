@@ -4,20 +4,29 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
-
-//TODO: Replace this with something better
+// TODO: Replace this with something better
 print_help :: proc() {
 	fmt.println("obang")
 	fmt.println("")
 	fmt.println("  obang cmd [tab] !bang [query ...]")
 	fmt.println("  obang runner <runner command ...>")
 	fmt.println("  obang browse <runner command ...>")
+	fmt.println("  obang search <name ...>")
+	fmt.println("  obang get <trigger-or-alias>")
+	fmt.println("  obang count")
 	fmt.println("  obang update")
+	fmt.println("  obang completions fish")
 	fmt.println("")
 	fmt.println("Examples:")
 	fmt.println("  obang cmd !yt odin lang")
+	fmt.println("  obang search youtube music")
+	fmt.println("  obang get !yt")
 	fmt.println("  obang runner wofi --dmenu --prompt obang")
 	fmt.println("  obang browse wofi --dmenu --prompt obang")
+	fmt.println("")
+	fmt.println("Fish completion:")
+	fmt.println("  mkdir -p ~/.config/fish/completions")
+	fmt.println("  obang completions fish > ~/.config/fish/completions/obang.fish")
 }
 
 open_firefox :: proc(url: string, new_tab: bool = false) -> bool {
@@ -31,7 +40,6 @@ open_firefox :: proc(url: string, new_tab: bool = false) -> bool {
 	}
 	return true
 }
-
 
 run_command :: proc(command: []string) -> bool {
 	state, stdout, stderr, err := os.process_exec(
