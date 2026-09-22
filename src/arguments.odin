@@ -4,6 +4,19 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
+open_firefox :: proc(url: string, new_tab: bool = false) -> bool {
+	mode := "--new-window"
+	if new_tab do mode = "--new-tab"
+
+	_, start_err := os.process_start(os.Process_Desc{command = []string{"firefox", mode, url}})
+	if start_err != nil {
+		fmt.eprintfln("Failed to start Firefox: %v", start_err)
+		return false
+	}
+
+	return true
+}
+
 parse_arguments :: proc() -> bool {
 	a := os.args[1:]
 	if len(a) == 0 {
@@ -20,9 +33,9 @@ parse_arguments :: proc() -> bool {
 				return false
 			}
 
-			fox_type := "--new-window"
+			new_tab := false
 			if a[0] == "-t" || a[0] == "tab" {
-				fox_type = "--new-tab"
+				new_tab = true
 				a = a[1:]
 				if len(a) == 0 {
 					fmt.eprintln("Expected a bang after tab option")
@@ -43,15 +56,29 @@ parse_arguments :: proc() -> bool {
 			}
 			defer delete_string(url)
 
-			_, start_err := os.process_start(
-				os.Process_Desc{command = []string{"firefox", fox_type, url}},
-			)
-			if start_err != nil {
-				fmt.eprintfln("Failed to start Firefox: %v", start_err)
+			return open_firefox(url, new_tab)
+
+		case "-r", "runner", "--runner":
+			a = a[1:]
+			if len(a) == 0 {
+				fmt.eprintln("Expected a runner command")
 				return false
 			}
 
-			return true
+			runner_input, ok := get_runner_input(a)
+			if !ok do return false
+			defer delete_string(runner_input)
+
+			db := Bang_DB{}
+			if !load_bang_db(&db) do return false
+
+			url, resolved := resolve_bang(db.data[:], runner_input)
+			if !resolved {
+				fmt.eprintfln("Could not resolve runner output: %s", runner_input)
+				return false
+			}
+			defer delete_string(url)
+			return open_firefox(url)
 
 		case "test":
 			db := Bang_DB{}

@@ -73,6 +73,20 @@ get_output_file :: proc(cache_dir: string) -> (output_file: string, ok: bool) {
 	return o, true
 }
 
+get_config_file :: proc() -> (config_file: string, ok: bool) {
+	h, _ := get_path_home()
+	defer delete_string(h)
+	c, config_err := os.join_path(
+		[]string{h, ".config", "obang", "config.json"},
+		context.allocator,
+	)
+	if config_err != nil {
+		fmt.eprintfln("Failed to buld config file path: %v", config_err)
+		return "", false
+	}
+	return c, true
+}
+
 get_main_paths :: proc() -> (cache_dir, repo_dir, source_file, output_file: string, ok: bool) {
 	home_dir, home_ok := get_path_home()
 	if !home_ok do return "", "", "", "", false
