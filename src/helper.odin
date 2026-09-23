@@ -41,14 +41,16 @@ Zsh completion:
 	)
 }
 
-// Open a url in Firefox, optionally reusing a new tab, instead of a new window
-open_firefox :: proc(url: string, new_tab: bool = false) -> bool {
-	mode := "--new-window"
-	if new_tab do mode = "--new-tab"
 
-	_, start_err := os.process_start(os.Process_Desc{command = []string{"firefox", mode, url}})
+// Open a url in browser, optionally reusing a new tab, instead of a new window
+open_url :: proc(url: string, new_tab: bool = false) -> bool {
+	c := cast(^Config)context.user_ptr
+	type := new_tab ? c.browser_tab_prefix : c.browser_win_prefix
+	_, start_err := os.process_start(
+		os.Process_Desc{command = []string{c.browser_cmd_prefix, type, url}},
+	)
 	if start_err != nil {
-		fmt.eprintfln("Failed to start Firefox: %v", start_err)
+		fmt.eprintfln("Failed to start browser: %v", start_err)
 		return false
 	}
 	return true

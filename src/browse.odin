@@ -398,7 +398,7 @@ run_selected_bang :: proc(bang: ^Bang, runner_command: []string) -> Browse_Resul
 	}
 	defer delete_string(url)
 
-	if !open_firefox(url) do return Browse_Result.Failed
+	if !open_url(url) do return Browse_Result.Failed
 	return Browse_Result.Done
 }
 

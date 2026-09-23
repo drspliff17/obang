@@ -1,8 +1,5 @@
 package main
 
-//TODO:
-// Implement config for loading custom bangs, and defining constant runner cmds
-
 import "core:fmt"
 import "core:os"
 import "core:strings"
@@ -56,7 +53,7 @@ main :: proc() {
 		}
 		defer delete_string(url)
 
-		open_firefox(url, new_tab)
+		open_url(url, new_tab)
 		return
 
 	case "-r", "runner", "--runner":
@@ -82,7 +79,7 @@ main :: proc() {
 
 			//TODO: Hook this default to Google Search behaviour into some config flag
 			url = resolve_template(b.template, runner_input)
-			open_firefox(url)
+			open_url(url)
 			delete_string(url)
 			return
 			// fmt.eprintfln("Could not resolve runner output: %s", runner_input)
@@ -90,7 +87,7 @@ main :: proc() {
 		}
 		defer delete_string(url)
 
-		open_firefox(url)
+		open_url(url)
 		return
 
 	case "-b", "browse", "--browse":

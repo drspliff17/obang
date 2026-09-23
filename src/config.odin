@@ -5,6 +5,10 @@ import "core:fmt"
 import "core:os"
 
 Config_General :: struct {
+	browser_cmd_prefix:  string,
+	browser_win_prefix:  string,
+	browser_tab_prefix:  string,
+	default_bounce_bang: string,
 	allow_notifications: bool,
 }
 
@@ -28,6 +32,12 @@ Config :: struct {
 
 config_create_default :: proc(filepath: string) {
 	default_config := Config {
+		general_settings = {
+			browser_cmd_prefix = "firefox",
+			browser_tab_prefix = "--new-tab",
+			browser_win_prefix = "--new-window",
+			default_bounce_bang = "!google",
+		},
 		runner_settings = {
 			empty_runner_cmd = {"wofi", "-d", "-W", "25%", "-H", "10%"},
 			browse_root_runner_cmd = {"wofi", "-d", "-p", "obang", "-d", "-W", "30%", "-L", "3"},
@@ -73,6 +83,21 @@ config_load :: proc(c: ^Config, filepath: string) {
 }
 
 config_verify :: proc(c: ^Config) -> bool {
+	if len(c.browser_cmd_prefix) == 0 {
+		fmt.eprintln("[ERROR] Config missing 'browser_cmd_prefix'")
+		return false
+	}
+
+	if len(c.browser_tab_prefix) == 0 {
+		fmt.eprintln("[ERROR] Config missing 'browser_tab_prefix'")
+		return false
+	}
+
+	if len(c.browser_win_prefix) == 0 {
+		fmt.eprintln("[ERROR] Config missing 'browser_win_prefix'")
+		return false
+	}
+
 	if len(c.browse_root_runner_cmd) == 0 {
 		fmt.eprintln("[ERROR] Config missing 'browse_root_runner_cmd'")
 		return false
@@ -134,6 +159,15 @@ config_init :: proc(c: ^Config) -> bool {
 }
 
 config_destroy :: proc(c: ^Config) {
+	if len(c.browser_cmd_prefix) > 0 do delete_string(c.browser_cmd_prefix)
+	if len(c.browser_tab_prefix) > 0 do delete_string(c.browser_tab_prefix)
+	if len(c.browser_win_prefix) > 0 do delete_string(c.browser_win_prefix)
+
+	if len(c.default_bounce_bang) > 0 do delete_string(c.default_bounce_bang)
+
+	for &x in c.bangs do bang_free(&x)
+	delete(c.bangs)
+
 	for x in c.browse_root_runner_cmd do delete_string(x)
 	delete(c.browse_root_runner_cmd)
 
