@@ -48,6 +48,171 @@ Bang_DB_Header :: struct {
 	schema_version: int,
 }
 
+// Deep-clone a string slice for independent ownership
+clone_string_slice :: proc(values: []string) -> []string {
+	if values == nil do return nil
+
+	result := make([]string, len(values))
+	for value, index in values do result[index] = strings.clone(value)
+	return result
+}
+
+// Deep-clone a bang so the returned value owns all of its strings and slices
+bang_clone :: proc(source: ^Bang) -> Bang {
+	result := Bang{}
+
+	if len(source.name) > 0 do result.name = strings.clone(source.name)
+	if len(source.domain) > 0 do result.domain = strings.clone(source.domain)
+	if len(source.snap_domain) > 0 do result.snap_domain = strings.clone(source.snap_domain)
+	if len(source.trigger) > 0 do result.trigger = strings.clone(source.trigger)
+	if len(source.template) > 0 do result.template = strings.clone(source.template)
+	if len(source.regex_pattern) > 0 do result.regex_pattern = strings.clone(source.regex_pattern)
+	if len(source.category) > 0 do result.category = strings.clone(source.category)
+	if len(source.subcategory) > 0 do result.subcategory = strings.clone(source.subcategory)
+
+	result.triggers = clone_string_slice(source.triggers)
+	result.format = clone_string_slice(source.format)
+	return result
+}
+
+// Return whether a custom bang's primary trigger matches an existing bang's
+// primary trigger or one of its aliases. Custom aliases do not select the
+// override target - they are claimed separately during the merge
+bang_matches_custom_trigger :: proc(bang, custom: ^Bang) -> bool {
+	if strings.equal_fold(bang.trigger, custom.trigger) do return true
+	for alias in bang.triggers do if strings.equal_fold(alias, custom.trigger) do return true
+	return false
+}
+
+// Find the loaded bang that a config bang should override. Name matches take
+// precedence, followed by a match against the custom bang's primary trigger
+find_bang_override_index :: proc(bangs: []Bang, custom: ^Bang) -> int {
+	for bang, index in bangs do if strings.equal_fold(bang.name, custom.name) do return index
+	for _, index in bangs do if bang_matches_custom_trigger(&bangs[index], custom) do return index
+	return -1
+}
+
+// Overlay the fields supplied by a config bang onto an existing loaded bang
+// Required fields always replace. Optional strings inherit when empty, while
+// nil slices inherit and explicitly present empty slices replace
+bang_apply_override :: proc(target, custom: ^Bang) {
+	if len(target.name) > 0 do delete_string(target.name)
+	target.name = strings.clone(custom.name)
+
+	if len(target.trigger) > 0 do delete_string(target.trigger)
+	target.trigger = strings.clone(custom.trigger)
+
+	if len(target.template) > 0 do delete_string(target.template)
+	target.template = strings.clone(custom.template)
+
+	if len(custom.domain) > 0 {
+		if len(target.domain) > 0 do delete_string(target.domain)
+		target.domain = strings.clone(custom.domain)
+	}
+
+	if len(custom.snap_domain) > 0 {
+		if len(target.snap_domain) > 0 do delete_string(target.snap_domain)
+		target.snap_domain = strings.clone(custom.snap_domain)
+	}
+
+	if len(custom.regex_pattern) > 0 {
+		if len(target.regex_pattern) > 0 do delete_string(target.regex_pattern)
+		target.regex_pattern = strings.clone(custom.regex_pattern)
+	}
+
+	if len(custom.category) > 0 {
+		if len(target.category) > 0 do delete_string(target.category)
+		target.category = strings.clone(custom.category)
+	}
+
+	if len(custom.subcategory) > 0 {
+		if len(target.subcategory) > 0 do delete_string(target.subcategory)
+		target.subcategory = strings.clone(custom.subcategory)
+	}
+
+	if custom.triggers != nil {
+		for value in target.triggers do delete_string(value)
+		delete(target.triggers)
+		target.triggers = clone_string_slice(custom.triggers)
+	}
+
+	if custom.format != nil {
+		for value in target.format do delete_string(value)
+		delete(target.format)
+		target.format = clone_string_slice(custom.format)
+	}
+}
+
+// Remove an alias from a bang while preserving ownership of all aliases that
+// remain. Every matching occurrence is removed
+bang_remove_alias :: proc(bang: ^Bang, alias: string) {
+	remove_count := 0
+	for value in bang.triggers do if strings.equal_fold(value, alias) do remove_count += 1
+	if remove_count == 0 do return
+
+	remaining := len(bang.triggers) - remove_count
+	new_triggers: []string
+	if remaining > 0 do new_triggers = make([]string, remaining)
+
+	write_index := 0
+	for value in bang.triggers {
+		if strings.equal_fold(value, alias) {
+			delete_string(value)
+			continue
+		}
+
+		new_triggers[write_index] = value
+		write_index += 1
+	}
+
+	delete(bang.triggers)
+	bang.triggers = new_triggers
+}
+
+// Remove the custom bang's claimed trigger and aliases from every other bang's
+// alias list. This keeps the trigger namespace unambiguous without deleting or
+// rewriting another bang's primary trigger
+db_claim_custom_keys :: proc(db: ^Bang_DB, owner_index: int, custom: ^Bang) {
+	for index in 0 ..< len(db.data) {
+		if index == owner_index do continue
+
+		other := &db.data[index]
+		bang_remove_alias(other, custom.trigger)
+		for alias in custom.triggers do bang_remove_alias(other, alias)
+	}
+}
+
+// Append a deep-cloned bang to the loaded database and return its new index
+db_append_bang_clone :: proc(db: ^Bang_DB, source: ^Bang) -> int {
+	old_data := db.data
+	new_index := len(old_data)
+	new_data := make([]Bang, new_index + 1)
+
+	for bang, index in old_data do new_data[index] = bang
+	new_data[new_index] = bang_clone(source)
+
+	delete(old_data)
+	db.data = new_data
+	return new_index
+}
+
+// Merge config bangs over the loaded Kagi database. A matching name or primary
+// trigger overrides the existing bang. Unique custom bangs are appended. After
+// each merge, the custom bang claims its configured trigger/aliases by removing
+// those values from every other bang's alias list
+merge_custom_bangs :: proc(db: ^Bang_DB, custom_bangs: []Bang) {
+	for &custom in custom_bangs {
+		index := find_bang_override_index(db.data[:], &custom)
+		if index >= 0 {
+			bang_apply_override(&db.data[index], &custom)
+		} else {
+			index = db_append_bang_clone(db, &custom)
+		}
+
+		db_claim_custom_keys(db, index, &custom)
+	}
+}
+
 // Free all heap-owned fields within given bang
 bang_free :: proc(b: ^Bang) {
 	if len(b.name) > 0 do delete_string(b.name)
@@ -228,6 +393,9 @@ load_bang_db :: proc(db: ^Bang_DB) -> bool {
 		fmt.eprintfln("Failed to unmarshal data: %v", unmarshal_err)
 		return false
 	}
+
+	config := cast(^Config)context.user_ptr
+	if config != nil && len(config.bangs) > 0 do merge_custom_bangs(db, config.bangs)
 
 	return true
 }
