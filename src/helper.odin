@@ -41,12 +41,21 @@ Zsh completion:
 	)
 }
 
-// Returns either a clone of input string, if prefixed, else a prefixed clone
+// Return an owned clone of a string, adding prefix when it is not already present
 ensure_prefix_allocated :: proc(s: string, prefix: string = "!") -> string {
+	if strings.has_prefix(s, prefix) do return strings.clone(s)
+	return strings.concatenate({prefix, s})
+}
+
+// Resolve a bang input using the configured lazy-bang behaviour. When lazy bangs
+// are enabled, inputs such as "yt cats" are treated as "!yt cats" before lookup
+resolve_bang_input :: proc(bangs: []Bang, input: string) -> (url: string, found: bool) {
 	config := cast(^Config)context.user_ptr
-	str :=
-		strings.has_prefix(config.default_bounce_bang, "!") ? strings.clone(config.default_bounce_bang) : strings.concatenate({"!", config.default_bounce_bang})
-	return str
+	if !config.lazy_bangs do return resolve_bang(bangs, input)
+
+	prefixed := ensure_prefix_allocated(input)
+	defer delete_string(prefixed)
+	return resolve_bang(bangs, prefixed)
 }
 
 // Open a url in browser, optionally reusing a new tab, instead of a new window

@@ -10,6 +10,7 @@ Config_General :: struct {
 	browser_tab_prefix:  string,
 	default_bounce_bang: string,
 	allow_notifications: bool,
+	lazy_bangs:          bool,
 }
 
 Config_Runner :: struct {

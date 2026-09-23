@@ -46,7 +46,7 @@ main :: proc() {
 		input := strings.join(a[:], " ")
 		defer delete_string(input)
 
-		url, ok := resolve_bang(db.data[:], input)
+		url, ok := resolve_bang_input(db.data[:], input)
 		if !ok {
 			fmt.eprintfln("Could not resolve bang: %s", input)
 			return
@@ -72,7 +72,7 @@ main :: proc() {
 		if !load_bang_db(&db) do return
 		defer db_destroy(&db)
 
-		url, resolved := resolve_bang(db.data[:], runner_input)
+		url, resolved := resolve_bang_input(db.data[:], runner_input)
 		if !resolved {
 			if len(config.default_bounce_bang) == 0 {
 				fmt.eprintfln(
@@ -86,7 +86,13 @@ main :: proc() {
 			defer delete_string(cbang)
 
 			b, ok := terminal_get_bang(db.data[:], cbang)
-			if !ok do fmt.eprintfln("Could not resolve runner output: %s", runner_input)
+			if !ok {
+				fmt.eprintfln(
+					"Could not resolve default bounce bang: %s",
+					config.default_bounce_bang,
+				)
+				return
+			}
 
 			url = resolve_template(b.template, runner_input)
 			defer delete_string(url)
