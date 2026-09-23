@@ -15,23 +15,34 @@ get_bang_prefix :: proc() -> string {
 print_help :: proc() {
 	prefix := get_bang_prefix()
 	fmt.printf(
-		`obang
-
-Usage:
-  obang cmd [tab] %sbang [query ...]
-  obang runner <runner command ...>
+		`Usage:
+  obang cmd [tab] [print] %sbang [query ...]
+  obang runner [print] <runner command ...>
   obang browse <runner command ...>
   obang search <name ...>
-  obang get <trigger-or-alias>
+  obang get [-j|--json] <trigger-or-alias>
   obang count
   obang update
   obang completions <fish|bash|zsh>
 
+Options:
+  tab, -t, --tab
+      Open the resolved URL in a new browser tab.
+
+  print, -p, --print
+      Print the resolved URL instead of opening it.
+
+  -j, --json
+      Print bang details as JSON when used with get.
+
 Examples:
   obang cmd %syt odin lang
+  obang cmd -p %syt odin lang
   obang search youtube music
   obang get %syt
+  obang get -j %syt
   obang runner wofi --dmenu --prompt obang
+  obang runner -p wofi --dmenu --prompt obang
   obang browse wofi --dmenu --prompt obang
 
 Fish completion:
@@ -49,8 +60,11 @@ Zsh completion:
 		prefix,
 		prefix,
 		prefix,
+		prefix,
+		prefix,
 	)
 }
+
 
 // Return an owned clone of a string, adding prefix when it is not already present
 ensure_prefix_allocated :: proc(s: string, prefix: string = "!") -> string {
