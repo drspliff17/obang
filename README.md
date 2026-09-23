@@ -78,13 +78,13 @@ install -Dm755 obang ~/.local/bin/obang
 ## Usage
 
 ```text
-obang cmd [tab] [print] <bang> [query ...]
-obang runner [print] <runner command ...>
-obang browse <runner command ...>
-obang search <name ...>
-obang get [-j|--json] <trigger-or-alias>
-obang count
-obang update
+obang -c / cmd [tab] [print] <bang> [query ...]
+obang -r / runner [print] <runner command ...>
+obang -b / browse <runner command ...>
+obang -s / search <name ...>
+obang -g / get [-j|--json] <trigger-or-alias>
+obang -n / count
+obang -u / update
 obang completions <fish|bash|zsh>
 ```
 
