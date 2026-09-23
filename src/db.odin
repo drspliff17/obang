@@ -350,6 +350,30 @@ update_kagi_bangs :: proc() -> bool {
 	return true
 }
 
+// Merge external custom bang files in config order. Later files override earlier
+// files, and inline config.custom.bangs are merged separately afterwards
+merge_custom_bang_files :: proc(db: ^Bang_DB, config: ^Config) -> bool {
+	if len(config.files) == 0 do return true
+
+	home_dir, home_ok := get_path_home()
+	if !home_ok do return false
+	defer delete_string(home_dir)
+
+	config_file, config_ok := get_config_file(home_dir)
+	if !config_ok do return false
+	defer delete_string(config_file)
+
+	for path in config.files {
+		bangs, loaded := config_load_bang_file(path, config_file)
+		if !loaded do return false
+
+		merge_custom_bangs(db, bangs)
+		config_destroy_bang_slice(bangs)
+	}
+
+	return true
+}
+
 // Load the cached bang database, rebuilding it when the cache schema version no longer matches current schema (or is missing)
 load_bang_db :: proc(db: ^Bang_DB) -> bool {
 	home_dir, home_ok := get_path_home()
@@ -395,7 +419,16 @@ load_bang_db :: proc(db: ^Bang_DB) -> bool {
 	}
 
 	config := cast(^Config)context.user_ptr
-	if config != nil && len(config.bangs) > 0 do merge_custom_bangs(db, config.bangs)
+	if config != nil {
+		// External files are merged in listed order first.
+		if !merge_custom_bang_files(db, config) {
+			db_destroy(db)
+			return false
+		}
+
+		// Inline config bangs always merge last and are the final authority.
+		if len(config.bangs) > 0 do merge_custom_bangs(db, config.bangs)
+	}
 
 	return true
 }

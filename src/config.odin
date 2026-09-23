@@ -3,6 +3,7 @@ package main
 import "core:encoding/json"
 import "core:fmt"
 import "core:os"
+import "core:strings"
 
 Config_General :: struct {
 	browser_cmd_prefix:  string,
@@ -23,6 +24,7 @@ Config_Runner :: struct {
 }
 
 Config_Bangs :: struct {
+	files: []string,
 	bangs: []Bang,
 }
 
@@ -39,7 +41,7 @@ config_create_default :: proc(filepath: string) {
 			browser_tab_prefix = "--new-tab",
 			browser_win_prefix = "--new-window",
 			default_bounce_bang = "!google",
-			alternate_prefix    = "",
+			alternate_prefix = "",
 		},
 		runner_settings = {
 			empty_runner_cmd = {"wofi", "-d", "-W", "25%", "-H", "10%"},
@@ -85,7 +87,112 @@ config_load :: proc(c: ^Config, filepath: string) {
 	if e := json.unmarshal(bytes, c); e != nil do fmt.panicf("Failed to unmarshal config: %v", e)
 }
 
-config_verify :: proc(c: ^Config) -> bool {
+// Verify required fields for a custom bang source.
+config_verify_bangs :: proc(bangs: []Bang, source: string) -> bool {
+	for x, index in bangs {
+		if len(x.name) == 0 {
+			fmt.eprintfln("[ERROR] %s: bang %d is missing 'name'", source, index + 1)
+			return false
+		}
+
+		if len(x.template) == 0 {
+			fmt.eprintfln("[ERROR] %s: bang %d is missing 'template'", source, index + 1)
+			return false
+		}
+
+		if len(x.trigger) == 0 {
+			fmt.eprintfln("[ERROR] %s: bang %d is missing 'trigger'", source, index + 1)
+			return false
+		}
+	}
+
+	return true
+}
+
+// Free a temporary slice of custom bangs loaded from an external file.
+config_destroy_bang_slice :: proc(bangs: []Bang) {
+	for &bang in bangs do bang_free(&bang)
+	delete(bangs)
+}
+
+// Resolve a custom bang filepath. Absolute paths are used as-is, ~/ paths are
+// expanded from the user's home directory, and relative paths are resolved
+// relative to the directory containing config.json.
+config_resolve_bang_file_path :: proc(
+	path, config_filepath: string,
+) -> (
+	resolved_path: string,
+	ok: bool,
+) {
+	trimmed := strings.trim_space(path)
+	if len(trimmed) == 0 {
+		fmt.eprintln("[ERROR] custom.files contains an empty filepath")
+		return "", false
+	}
+
+	if trimmed[0] == '/' do return strings.clone(trimmed), true
+
+	if trimmed == "~" || strings.has_prefix(trimmed, "~/") {
+		home, home_ok := get_path_home()
+		if !home_ok do return "", false
+		defer delete_string(home)
+
+		if trimmed == "~" do return strings.clone(home), true
+
+		resolved, join_err := os.join_path([]string{home, trimmed[2:]}, context.allocator)
+		if join_err != nil {
+			fmt.eprintfln("[ERROR] Failed to resolve custom bang file %s: %v", path, join_err)
+			return "", false
+		}
+		return resolved, true
+	}
+
+	resolved, join_err := os.join_path(
+		[]string{os.dir(config_filepath), trimmed},
+		context.allocator,
+	)
+	if join_err != nil {
+		fmt.eprintfln("[ERROR] Failed to resolve custom bang file %s: %v", path, join_err)
+		return "", false
+	}
+	return resolved, true
+}
+
+// Load and validate a JSON file containing a plain array of Bang objects
+// Ownership of the returned bangs belongs to the caller
+config_load_bang_file :: proc(path, config_filepath: string) -> (bangs: []Bang, ok: bool) {
+	resolved, path_ok := config_resolve_bang_file_path(path, config_filepath)
+	if !path_ok do return nil, false
+	defer delete_string(resolved)
+
+	if !os.exists(resolved) {
+		fmt.eprintfln("[ERROR] Custom bang file does not exist: %s", resolved)
+		return nil, false
+	}
+
+	bytes, read_err := os.read_entire_file(resolved, context.allocator)
+	if read_err != nil {
+		fmt.eprintfln("[ERROR] Failed to read custom bang file %s: %v", resolved, read_err)
+		return nil, false
+	}
+	defer delete(bytes)
+
+	unmarshal_err := json.unmarshal(bytes, &bangs)
+	if unmarshal_err != nil {
+		if bangs != nil do config_destroy_bang_slice(bangs)
+		fmt.eprintfln("[ERROR] Failed to parse custom bang file %s: %v", resolved, unmarshal_err)
+		return nil, false
+	}
+
+	if !config_verify_bangs(bangs, resolved) {
+		config_destroy_bang_slice(bangs)
+		return nil, false
+	}
+
+	return bangs, true
+}
+
+config_verify :: proc(c: ^Config, filepath: string) -> bool {
 	if len(c.browser_cmd_prefix) == 0 {
 		fmt.eprintln("[ERROR] Config missing 'browser_cmd_prefix'")
 		return false
@@ -126,25 +233,13 @@ config_verify :: proc(c: ^Config) -> bool {
 		return false
 	}
 
-	for x in c.bangs {
-
-		//TODO: Add proper Bang Verification here
-
-		if len(x.name) == 0 {
-			fmt.println("[ERROR] Custom bang is missing name")
-			return false
-		}
-
-		if len(x.template) == 0 {
-			fmt.println("[ERROR] Custom bang is missing template")
-			return false
-		}
-
-		if len(x.trigger) == 0 {
-			fmt.println("[ERROR] Custom bang is missing trigger")
-			return false
-		}
+	for path in c.files {
+		bangs, loaded := config_load_bang_file(path, filepath)
+		if !loaded do return false
+		config_destroy_bang_slice(bangs)
 	}
+
+	if !config_verify_bangs(c.bangs, "config.custom.bangs") do return false
 
 	return true
 }
@@ -158,7 +253,13 @@ config_init :: proc(c: ^Config) -> bool {
 	}
 	if !os.exists(cfg_path) do config_create_default(cfg_path)
 	config_load(c, cfg_path)
-	return config_verify(c)
+
+	if !config_verify(c, cfg_path) {
+		config_destroy(c)
+		return false
+	}
+
+	return true
 }
 
 config_destroy :: proc(c: ^Config) {
@@ -168,6 +269,9 @@ config_destroy :: proc(c: ^Config) {
 
 	if len(c.default_bounce_bang) > 0 do delete_string(c.default_bounce_bang)
 	if len(c.alternate_prefix) > 0 do delete_string(c.alternate_prefix)
+
+	for path in c.files do delete_string(path)
+	delete(c.files)
 
 	for &x in c.bangs do bang_free(&x)
 	delete(c.bangs)
