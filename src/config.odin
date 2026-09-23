@@ -6,13 +6,17 @@ import "core:os"
 import "core:strings"
 
 Config_General :: struct {
-	browser_cmd_prefix:  string,
-	browser_win_prefix:  string,
-	browser_tab_prefix:  string,
 	default_bounce_bang: string,
 	alternate_prefix:    string,
 	allow_notifications: bool,
+	disable_kagi_bangs:  bool,
 	lazy_bangs:          bool,
+}
+
+Config_Browser :: struct {
+	browser_cmd_prefix: string,
+	browser_win_prefix: string,
+	browser_tab_prefix: string,
 }
 
 Config_Runner :: struct {
@@ -31,18 +35,18 @@ Config_Bangs :: struct {
 Config :: struct {
 	using custom:           Config_Bangs,
 	using runner_settings:  Config_Runner,
+	using browser_settings: Config_Browser,
 	using general_settings: Config_General,
 }
 
 config_create_default :: proc(filepath: string) {
 	default_config := Config {
-		general_settings = {
+		browser_settings = {
 			browser_cmd_prefix = "firefox",
 			browser_tab_prefix = "--new-tab",
 			browser_win_prefix = "--new-window",
-			default_bounce_bang = "!google",
-			alternate_prefix = "",
 		},
+		general_settings = {default_bounce_bang = "!google"},
 		runner_settings = {
 			empty_runner_cmd = {"wofi", "-d", "-W", "25%", "-H", "10%"},
 			browse_root_runner_cmd = {"wofi", "-d", "-p", "obang", "-d", "-W", "30%", "-L", "3"},

@@ -374,60 +374,69 @@ merge_custom_bang_files :: proc(db: ^Bang_DB, config: ^Config) -> bool {
 	return true
 }
 
-// Load the cached bang database, rebuilding it when the cache schema version no longer matches current schema (or is missing)
+// Load the bang database, optionally skipping Kagi entirely, then merge external
+// custom files followed by inline config bangs as the final authority
 load_bang_db :: proc(db: ^Bang_DB) -> bool {
-	home_dir, home_ok := get_path_home()
-	if !home_ok do return false
-	defer delete_string(home_dir)
-
-	cache_dir, cache_ok := get_path_cache(home_dir)
-	if !cache_ok do return false
-	defer delete_string(cache_dir)
-
-	output_file, output_ok := get_output_file(cache_dir)
-	if !output_ok do return false
-	defer delete_string(output_file)
-
-	if !os.exists(output_file) {
-		if !update_kagi_bangs() do return false
-	}
-
-	bytes, read_err := os.read_entire_file(output_file, context.allocator)
-	if read_err != nil {
-		fmt.eprintfln("Failed to read %s: %v", output_file, read_err)
-		return false
-	}
-	defer delete(bytes)
-
-	header := Bang_DB_Header{}
-	header_err := json.unmarshal(bytes, &header)
-	if header_err != nil {
-		fmt.eprintfln("Failed to read database header: %v", header_err)
-		return false
-	}
-
-	if header.schema_version != BANG_DB_SCHEMA_VERSION {
-		fmt.println("Bang database schema changed; rebuilding cache ...")
-		if !update_kagi_bangs() do return false
-		return load_bang_db(db)
-	}
-
-	unmarshal_err := json.unmarshal(bytes, db)
-	if unmarshal_err != nil {
-		fmt.eprintfln("Failed to unmarshal data: %v", unmarshal_err)
-		return false
-	}
-
 	config := cast(^Config)context.user_ptr
+
+	if config == nil || !config.disable_kagi_bangs {
+		home_dir, home_ok := get_path_home()
+		if !home_ok do return false
+		defer delete_string(home_dir)
+
+		cache_dir, cache_ok := get_path_cache(home_dir)
+		if !cache_ok do return false
+		defer delete_string(cache_dir)
+
+		output_file, output_ok := get_output_file(cache_dir)
+		if !output_ok do return false
+		defer delete_string(output_file)
+
+		if !os.exists(output_file) {
+			if !update_kagi_bangs() do return false
+		}
+
+		bytes, read_err := os.read_entire_file(output_file, context.allocator)
+		if read_err != nil {
+			fmt.eprintfln("Failed to read %s: %v", output_file, read_err)
+			return false
+		}
+		defer delete(bytes)
+
+		header := Bang_DB_Header{}
+		header_err := json.unmarshal(bytes, &header)
+		if header_err != nil {
+			fmt.eprintfln("Failed to read database header: %v", header_err)
+			return false
+		}
+
+		if header.schema_version != BANG_DB_SCHEMA_VERSION {
+			fmt.println("Bang database schema changed; rebuilding cache ...")
+			if !update_kagi_bangs() do return false
+			return load_bang_db(db)
+		}
+
+		unmarshal_err := json.unmarshal(bytes, db)
+		if unmarshal_err != nil {
+			fmt.eprintfln("Failed to unmarshal data: %v", unmarshal_err)
+			return false
+		}
+	} else {
+		db.schema_version = BANG_DB_SCHEMA_VERSION
+	}
+
 	if config != nil {
-		// External files are merged in listed order first.
 		if !merge_custom_bang_files(db, config) {
 			db_destroy(db)
 			return false
 		}
-
-		// Inline config bangs always merge last and are the final authority.
 		if len(config.bangs) > 0 do merge_custom_bangs(db, config.bangs)
+	}
+
+	if len(db.data) == 0 {
+		fmt.eprintln("[ERROR] No bangs loaded")
+		db_destroy(db)
+		return false
 	}
 
 	return true
