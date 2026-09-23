@@ -5,7 +5,6 @@ import "core:os"
 import "core:strings"
 
 main :: proc() {
-
 	config: Config
 	if !config_init(&config) do return
 	defer config_destroy(&config)
@@ -30,13 +29,27 @@ main :: proc() {
 		}
 
 		new_tab := false
-		if a[0] == "-t" || a[0] == "tab" {
-			new_tab = true
-			a = a[1:]
-			if len(a) == 0 {
-				fmt.eprintln("Expected a bang after tab option")
-				return
+		print_only := false
+
+		for len(a) > 0 {
+			switch a[0] {
+			case "-t", "tab":
+				new_tab = true
+				a = a[1:]
+				continue
+
+			case "-p", "print":
+				print_only = true
+				a = a[1:]
+				continue
+
 			}
+			break
+		}
+
+		if len(a) == 0 {
+			fmt.eprintln("Expected a bang to resolve")
+			return
 		}
 
 		db := Bang_DB{}
@@ -53,17 +66,34 @@ main :: proc() {
 		}
 		defer delete_string(url)
 
-		open_url(url, new_tab)
+		if print_only {
+			fmt.println(url)
+		} else {
+			open_url(url, new_tab)
+		}
 		return
 
 	case "-r", "runner", "--runner":
 		a = a[1:]
+
+		print_only := false
+		for len(a) > 0 {
+			switch a[0] {
+			case "-p", "print":
+				print_only = true
+				a = a[1:]
+				continue
+			}
+			break
+		}
+
 		if len(a) == 0 && len(config.empty_runner_cmd) == 0 {
 			fmt.eprintln("Expected a runner command")
 			return
 		}
 
 		if len(config.empty_runner_cmd) > 0 do a = config.empty_runner_cmd
+
 		runner_input, ok := get_runner_input(a)
 		if !ok do return
 		defer delete_string(runner_input)
@@ -97,12 +127,20 @@ main :: proc() {
 			url = resolve_template(b.template, runner_input)
 			defer delete_string(url)
 
-			open_url(url)
+			if print_only {
+				fmt.println(url)
+			} else {
+				open_url(url)
+			}
 			return
 		}
 		defer delete_string(url)
 
-		open_url(url)
+		if print_only {
+			fmt.println(url)
+		} else {
+			open_url(url)
+		}
 		return
 
 	case "-b", "browse", "--browse":
