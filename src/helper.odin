@@ -4,13 +4,21 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
+// Return the user-facing bang prefix. Internally, Kagi bang resolution remains canonical !
+get_bang_prefix :: proc() -> string {
+	config := cast(^Config)context.user_ptr
+	if len(config.alternate_prefix) > 0 do return config.alternate_prefix
+	return "!"
+}
+
 // Print command usage, examples, and shell completion setup instructions
 print_help :: proc() {
-	fmt.print(
+	prefix := get_bang_prefix()
+	fmt.printf(
 		`obang
 
 Usage:
-  obang cmd [tab] !bang [query ...]
+  obang cmd [tab] %sbang [query ...]
   obang runner <runner command ...>
   obang browse <runner command ...>
   obang search <name ...>
@@ -20,9 +28,9 @@ Usage:
   obang completions <fish|bash|zsh>
 
 Examples:
-  obang cmd !yt odin lang
+  obang cmd %syt odin lang
   obang search youtube music
-  obang get !yt
+  obang get %syt
   obang runner wofi --dmenu --prompt obang
   obang browse wofi --dmenu --prompt obang
 
@@ -38,6 +46,9 @@ Zsh completion:
   mkdir -p ~/.zfunc
   obang completions zsh > ~/.zfunc/_obang
 `,
+		prefix,
+		prefix,
+		prefix,
 	)
 }
 
@@ -47,15 +58,36 @@ ensure_prefix_allocated :: proc(s: string, prefix: string = "!") -> string {
 	return strings.concatenate({prefix, s})
 }
 
-// Resolve a bang input using the configured lazy-bang behaviour. When lazy bangs
-// are enabled, inputs such as "yt cats" are treated as "!yt cats" before lookup
+// Convert a user-facing bang prefix to the canonical `!` expected by the bang database.
+normalize_bang_prefix_allocated :: proc(s, prefix: string) -> (string, bool) {
+	input := strings.trim_space(s)
+	if !strings.has_prefix(input, prefix) do return "", false
+
+	if prefix == "!" do return strings.clone(input), true
+	return strings.concatenate({"!", input[len(prefix):]}), true
+}
+
+// Resolve a bang input using the configured user-facing prefix and lazy-bang behaviour
+// The configured prefix is normalized back to canonical ! before database resolution
 resolve_bang_input :: proc(bangs: []Bang, input: string) -> (url: string, found: bool) {
 	config := cast(^Config)context.user_ptr
-	if !config.lazy_bangs do return resolve_bang(bangs, input)
+	prefix := get_bang_prefix()
+	trimmed := strings.trim_space(input)
 
-	prefixed := ensure_prefix_allocated(input)
-	defer delete_string(prefixed)
-	return resolve_bang(bangs, prefixed)
+	user_input := ""
+	if config.lazy_bangs {
+		user_input = ensure_prefix_allocated(trimmed, prefix)
+	} else {
+		if !strings.has_prefix(trimmed, prefix) do return "", false
+		user_input = strings.clone(trimmed)
+	}
+	defer delete_string(user_input)
+
+	canonical, normalized := normalize_bang_prefix_allocated(user_input, prefix)
+	if !normalized do return "", false
+	defer delete_string(canonical)
+
+	return resolve_bang(bangs, canonical)
 }
 
 // Open a url in browser, optionally reusing a new tab, instead of a new window

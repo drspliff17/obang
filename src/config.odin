@@ -9,6 +9,7 @@ Config_General :: struct {
 	browser_win_prefix:  string,
 	browser_tab_prefix:  string,
 	default_bounce_bang: string,
+	alternate_prefix:    string,
 	allow_notifications: bool,
 	lazy_bangs:          bool,
 }
@@ -38,6 +39,7 @@ config_create_default :: proc(filepath: string) {
 			browser_tab_prefix = "--new-tab",
 			browser_win_prefix = "--new-window",
 			default_bounce_bang = "!google",
+			alternate_prefix    = "",
 		},
 		runner_settings = {
 			empty_runner_cmd = {"wofi", "-d", "-W", "25%", "-H", "10%"},
@@ -165,6 +167,7 @@ config_destroy :: proc(c: ^Config) {
 	if len(c.browser_win_prefix) > 0 do delete_string(c.browser_win_prefix)
 
 	if len(c.default_bounce_bang) > 0 do delete_string(c.default_bounce_bang)
+	if len(c.alternate_prefix) > 0 do delete_string(c.alternate_prefix)
 
 	for &x in c.bangs do bang_free(&x)
 	delete(c.bangs)

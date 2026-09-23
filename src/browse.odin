@@ -101,8 +101,9 @@ score_bang_term :: proc(bang: ^Bang, term: string) -> int {
 score_bang_search :: proc(bang: ^Bang, input_query: string) -> int {
 	query := strings.trim_space(input_query)
 	if len(query) == 0 do return 0
-	if query[0] == '!' {
-		query = strings.trim_space(query[1:])
+	prefix := get_bang_prefix()
+	if strings.has_prefix(query, prefix) {
+		query = strings.trim_space(query[len(prefix):])
 		if len(query) == 0 do return 0
 	}
 
@@ -260,7 +261,8 @@ collect_bang_rows :: proc(
 
 // Append single formatted bang entry to a runner
 append_bang_menu_line :: proc(builder: ^strings.Builder, bang: ^Bang) {
-	fmt.sbprintf(builder, "!%s\t%s", bang.trigger, bang.name)
+	prefix := get_bang_prefix()
+	fmt.sbprintf(builder, "%s%s\t%s", prefix, bang.trigger, bang.name)
 	if len(bang.category) > 0 {
 		fmt.sbprintf(builder, "\t%s", bang.category)
 		if len(bang.subcategory) > 0 do fmt.sbprintf(builder, " > %s", bang.subcategory)
@@ -350,7 +352,14 @@ menu_first_two_fields :: proc(selection: string) -> (first, second: string, ok: 
 // Find a band bt primary trigger, or alias, accepting an optional leading !
 find_bang_by_trigger :: proc(bangs: []Bang, trigger_with_bang: string) -> (^Bang, bool) {
 	trigger := strings.trim_space(trigger_with_bang)
-	if len(trigger) > 0 && trigger[0] == '!' do trigger = trigger[1:]
+	prefix := get_bang_prefix()
+
+	if strings.has_prefix(trigger, prefix) {
+		trigger = trigger[len(prefix):]
+	} else if strings.has_prefix(trigger, "!") {
+		trigger = trigger[1:]
+	}
+
 	if len(trigger) == 0 do return nil, false
 
 	for index in 0 ..< len(bangs) do if bang_matches_trigger(&bangs[index], trigger) do return &bangs[index], true
@@ -393,7 +402,7 @@ run_selected_bang :: proc(bang: ^Bang, runner_command: []string) -> Browse_Resul
 
 	url, resolved := resolve_bang_target(bang, query)
 	if !resolved {
-		fmt.eprintfln("Could not resolve !%s", bang.trigger)
+		fmt.eprintfln("Could not resolve %s%s", get_bang_prefix(), bang.trigger)
 		return Browse_Result.Failed
 	}
 	defer delete_string(url)

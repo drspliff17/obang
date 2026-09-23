@@ -3,11 +3,13 @@ package main
 import "core:fmt"
 import "core:strings"
 
-// Returns whether a bang trigger, or alias, matches the prefix currently being completed
-// Leading ! is ignored. An empty prefix matches everything
+// Returns whether a bang trigger or alias matches the prefix currently being completed.
+// The configured user-facing bang prefix is ignored. An empty prefix matches everything.
 completion_key_matches :: proc(key, input_prefix: string) -> bool {
 	prefix := strings.trim_space(input_prefix)
-	if len(prefix) > 0 && prefix[0] == '!' do prefix = prefix[1:]
+	user_prefix := get_bang_prefix()
+
+	if strings.has_prefix(prefix, user_prefix) do prefix = prefix[len(user_prefix):]
 	if len(prefix) == 0 do return true
 	return ascii_has_prefix_fold(key, prefix)
 }
@@ -15,14 +17,23 @@ completion_key_matches :: proc(key, input_prefix: string) -> bool {
 // Prints bang completion candidates. Aliases are emitted as separate candidates, and identify
 // their primary trigger in the desc. Optional prefix can be used to avoid sending entire bang database
 // to the shell on every request
-print_bang_completions :: proc(bangs: []Bang, prefix: string = "") {
+print_bang_completions :: proc(bangs: []Bang, input_prefix: string = "") {
+	user_prefix := get_bang_prefix()
+
 	for bang in bangs {
-		if completion_key_matches(bang.trigger, prefix) {
-			fmt.printfln("!%s\t%s", bang.trigger, bang.name)
+		if completion_key_matches(bang.trigger, input_prefix) {
+			fmt.printfln("%s%s\t%s", user_prefix, bang.trigger, bang.name)
 		}
 		for alias in bang.triggers {
-			if completion_key_matches(alias, prefix) {
-				fmt.printfln("!%s\t%s (alias for !%s)", alias, bang.name, bang.trigger)
+			if completion_key_matches(alias, input_prefix) {
+				fmt.printfln(
+					"%s%s\t%s (alias for %s%s)",
+					user_prefix,
+					alias,
+					bang.name,
+					user_prefix,
+					bang.trigger,
+				)
 			}
 		}
 	}

@@ -87,7 +87,8 @@ terminal_search_names :: proc(bangs: []Bang, query: string) -> [dynamic]Terminal
 
 // Print a compact tab-separated summary of a bang for terminal search output
 print_terminal_bang_row :: proc(bang: ^Bang) {
-	fmt.printf("!%s\t%s", bang.trigger, bang.name)
+	prefix := get_bang_prefix()
+	fmt.printf("%s%s\t%s", prefix, bang.trigger, bang.name)
 
 	if len(bang.category) > 0 {
 		fmt.printf("\t%s", bang.category)
@@ -121,15 +122,22 @@ terminal_search :: proc(db: ^Bang_DB, query: string) -> bool {
 	return true
 }
 
-// Find a bang by exact primary trigger or alias, accepting optional leading !
+// Find a bang by exact primary trigger or alias, accepting the configured user prefix
+// Canonical ! is also accepted for internal lookups, such as default bouncing
 terminal_get_bang :: proc(bangs: []Bang, input_key: string) -> (^Bang, bool) {
 	key := strings.trim_space(input_key)
-	if len(key) > 0 && key[0] == '!' do key = key[1:]
+	prefix := get_bang_prefix()
+
+	if strings.has_prefix(key, prefix) {
+		key = key[len(prefix):]
+	} else if strings.has_prefix(key, "!") {
+		key = key[1:]
+	}
+
 	if len(key) == 0 do return nil, false
 
 	for index in 0 ..< len(bangs) {
 		bang := &bangs[index]
-
 		if strings.equal_fold(bang.trigger, key) do return bang, true
 		for alias in bang.triggers do if strings.equal_fold(alias, key) do return bang, true
 	}
@@ -149,15 +157,15 @@ print_bang_json :: proc(bang: ^Bang) -> bool {
 		return false
 	}
 	defer delete(output)
-
 	fmt.println(string(output))
 	return true
 }
 
 // Print a human-readable summary of all relevant fields for a bang
 print_bang_details :: proc(bang: ^Bang) {
+	prefix := get_bang_prefix()
 	fmt.printfln("Name:        %s", bang.name)
-	fmt.printfln("Trigger:     !%s", bang.trigger)
+	fmt.printfln("Trigger:     %s%s", prefix, bang.trigger)
 
 	fmt.print("Aliases:     ")
 	if len(bang.triggers) == 0 {
@@ -165,7 +173,7 @@ print_bang_details :: proc(bang: ^Bang) {
 	} else {
 		for alias, index in bang.triggers {
 			if index > 0 do fmt.print(", ")
-			fmt.printf("!%s", alias)
+			fmt.printf("%s%s", prefix, alias)
 		}
 		fmt.println()
 	}
@@ -229,6 +237,5 @@ terminal_get :: proc(db: ^Bang_DB, key: string, json_output: bool = false) -> bo
 	} else {
 		print_bang_details(bang)
 	}
-
 	return true
 }
