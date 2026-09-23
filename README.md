@@ -15,10 +15,9 @@ in external scripts, other tools and so on
 - Kagi bangs as the default bang source
 - Optional Kagi-free mode
 - Local cached bang database
-- Custom bangs and overrides
-- External json bang files
+- Custom bangs and overrides via external json bang files
 - Deterministic merge precedence
-- Alias claiming between custom and existing bangs
+- Trigger and alias claiming between custom and existing bangs
 - Configurable bang prefix
 - Optional lazy bangs
 - Direct terminal bang resolution
@@ -50,7 +49,6 @@ custom.bangs
 
 Later sources override earlier ones, so inline `custom.bangs` are always the
 final authority
-
 If `disable_kagi_bangs` is enabled, the Kagi layer is skipped entirely:
 
 ```text
@@ -61,7 +59,9 @@ If no bangs are available after loading, `obang` exits with an error
 
 ## Building
 
-Requires [Odin](https://odin-lang.org/) and `git`
+Requires [Odin](https://odin-lang.org/) to build
+
+`git` is required at runtime when downloading or updating the Kagi bang database
 
 From the project directory:
 
@@ -78,7 +78,7 @@ install -Dm755 obang ~/.local/bin/obang
 ## Usage
 
 ```text
-obang cmd [tab] [print] !bang [query ...]
+obang cmd [tab] [print] <bang> [query ...]
 obang runner [print] <runner command ...>
 obang browse <runner command ...>
 obang search <name ...>
@@ -138,9 +138,9 @@ obang browse wofi --dmenu --prompt obang
 ```
 
 Browse mode provides searchable bang, category, and subcategory menus
+Cancelling a nested selection moves back to the previous menu
 
-Cancelling a nested selection moves back to the previous menu. The entire browse
-session can also be exited with `SIGINT`
+The entire browse session can also be exited with `SIGINT`
 
 ### Search
 
@@ -264,15 +264,17 @@ A representative configuration looks like this:
       "30%"
     ]
   },
-  "general_settings": {
+  "browser_settings": {
     "browser_cmd_prefix": "firefox",
     "browser_win_prefix": "--new-window",
-    "browser_tab_prefix": "--new-tab",
+    "browser_tab_prefix": "--new-tab"
+  },
+  "general_settings": {
     "default_bounce_bang": "!google",
     "alternate_prefix": "",
     "allow_notifications": false,
-    "lazy_bangs": false,
-    "disable_kagi_bangs": false
+    "disable_kagi_bangs": false,
+    "lazy_bangs": false
   }
 }
 ```
@@ -312,17 +314,37 @@ The full supported shape is:
 }
 ```
 
-`name`, `trigger`, and `template` are required - Everything else is optional
+`name`, `trigger`, and `template` are required
+Everything else is optional
+
+Triggers and aliases are stored without a bang prefix:
+
+```json
+{
+  "trigger": "ghu",
+  "triggers": ["github-user"]
+}
+```
+
+Do not use `"!ghu"` or another configured prefix here
+Prefixes such as `!` or `@` are only part of user-facing bang syntax
 
 ### Overrides
 
 A custom bang can override an existing loaded bang by matching its name or
 primary trigger
 
-Optional fields only replace the existing value when supplied by the custom bang.
-This makes small overrides possible without copying the entire Kagi entry
+Optional fields only replace the existing value when supplied by the custom bang
+This makes small overrides possible without copying the entire existing entry
+
+Custom trigger ownership is authoritative
+If a custom bang claims a primary trigger already used by another loaded bang,
+the conflicting entry is removed
+If it claims an alias used by another bang, that alias is removed from the other
+entry
 
 Aliases have three useful behaviours
+
 Omitting `triggers` keeps the existing aliases:
 
 ```json
@@ -351,6 +373,7 @@ alias from resolving to multiple entries
 ## External bang files
 
 Large custom bang collections do not need to live directly inside `config.json`
+
 Reference them using `custom.files`:
 
 ```json
@@ -370,11 +393,11 @@ Each referenced file contains a plain json array of bang objects:
 ```json
 [
   {
-    "name": "WatchSeries",
-    "domain": "ww8.watchseriesfree.co",
+    "name": "Example",
+    "domain": "www.examplesite.com",
     "trigger": "wat",
     "triggers": ["watch", "ws"],
-    "template": "https://ww8.watchseriesfree.co/search/?q={{{s}}}",
+    "template": "https://www.examplesite.com/search/?q={{{s}}}",
     "category": "Entertainment"
   },
   {
@@ -393,15 +416,16 @@ Paths may be absolute, home-relative, or relative to the `obang` config director
 bangs/example.json
 ```
 
-Referenced files are validated at startup. Invalid paths, unreadable files,
-malformed json, or bangs missing required fields cause startup to fail, rather
-than silently producing a partial database
+Referenced files are validated at startup
+Invalid paths, unreadable files, malformed json, or bangs missing required fields
+cause startup to fail rather than silently producing a partial database
 
 ## Bang prefixes
 
-Internally, bang resolution always uses the canonical `!` prefix.
+Internally, bang resolution always uses the canonical `!` prefix
 
-`alternate_prefix` only changes the user-facing syntax. For example:
+`alternate_prefix` only changes the user-facing syntax
+For example:
 
 ```json
 "alternate_prefix": "@"
@@ -423,7 +447,7 @@ With:
 "lazy_bangs": true
 ```
 
-an unprefixed runner input such as:
+an unprefixed input such as:
 
 ```text
 yt cats
@@ -431,7 +455,7 @@ yt cats
 
 is first treated as though the configured bang prefix had been supplied
 If it does not resolve as a bang, runner mode can still fall back through
-`default_bounce_bang` (if set)
+`default_bounce_bang` (when set to a valid bang trigger)
 
 ## Disable Kagi bangs
 
@@ -441,8 +465,9 @@ For a completely custom database:
 "disable_kagi_bangs": true
 ```
 
-Kagi bangs will not be loaded.
+Kagi bangs will not be loaded
 External files and inline custom bangs continue to work normally
+
 If this leaves the database empty, `obang` exits with an error
 
 ## Runner configuration
@@ -500,8 +525,13 @@ compinit
 {{{s}}}
 ```
 
-It also supports regex-backed `$1`, `$2`, ... replacement templates where
-defined, by a bang
+It also supports `$1`, `$2`, ... placeholders
+
+When `regex_pattern` is defined, these are populated from regex capture groups
+
+Without a regex pattern, they are populated from space-separated query parts,
+with the final placeholder receiving the remainder of the query
+
 Supported formatting flags:
 
 ```text
@@ -513,9 +543,33 @@ open_base_path
 
 These control query encoding and empty-query behaviour
 
+- `url_encode_placeholder` — percent-encode the value inserted into `{{{s}}}`
+- `url_encode_space_to_plus` — replace encoded spaces (`%20`) with `+`
+- `open_snap_domain` — when no query is supplied, open the bang's `snap_domain`
+- `open_base_path` — when no query is supplied, open the bang's base domain
+
 If `format` is omitted or `null`, all formatting flags are treated as enabled
-by default. To disable a specific behaviour, provide an explicit `format`
-array containing only the flags you want
+by default
+
+To disable a specific behaviour, provide an explicit `format` array containing
+only the flags you want
+
+```json
+{
+  "format": [
+    "url_encode_placeholder",
+    "url_encode_space_to_plus"
+  ]
+}
+```
+
+An empty array disables all optional formatting behaviour:
+
+```json
+{
+  "format": []
+}
+```
 
 ## Why obang?
 
