@@ -75,20 +75,17 @@ bang_clone :: proc(source: ^Bang) -> Bang {
 	return result
 }
 
-// Return whether a custom bang's primary trigger matches an existing bang's
-// primary trigger or one of its aliases. Custom aliases do not select the
-// override target - they are claimed separately during the merge
-bang_matches_custom_trigger :: proc(bang, custom: ^Bang) -> bool {
-	if strings.equal_fold(bang.trigger, custom.trigger) do return true
-	for alias in bang.triggers do if strings.equal_fold(alias, custom.trigger) do return true
-	return false
-}
-
-// Find the loaded bang that a config bang should override. Name matches take
-// precedence, followed by a match against the custom bang's primary trigger
+// Find the loaded bang that a custom bang should override. Name matches take
+// precedence, followed by exact primary-trigger matches, then alias matches
 find_bang_override_index :: proc(bangs: []Bang, custom: ^Bang) -> int {
 	for bang, index in bangs do if strings.equal_fold(bang.name, custom.name) do return index
-	for _, index in bangs do if bang_matches_custom_trigger(&bangs[index], custom) do return index
+
+	for bang, index in bangs do if strings.equal_fold(bang.trigger, custom.trigger) do return index
+
+	for bang, index in bangs {
+		for alias in bang.triggers do if strings.equal_fold(alias, custom.trigger) do return index
+	}
+
 	return -1
 }
 
@@ -169,9 +166,58 @@ bang_remove_alias :: proc(bang: ^Bang, alias: string) {
 	bang.triggers = new_triggers
 }
 
-// Remove the custom bang's claimed trigger and aliases from every other bang's
-// alias list. This keeps the trigger namespace unambiguous without deleting or
-// rewriting another bang's primary trigger
+// Remove a bang from the loaded database while preserving ownership of all
+// remaining entries
+db_remove_bang_at :: proc(db: ^Bang_DB, remove_index: int) {
+	old_data := db.data
+
+	bang_free(&old_data[remove_index])
+
+	new_data := make([]Bang, len(old_data) - 1)
+	write_index := 0
+
+	for index in 0 ..< len(old_data) {
+		if index == remove_index do continue
+
+		new_data[write_index] = old_data[index]
+		write_index += 1
+	}
+
+	delete(old_data)
+	db.data = new_data
+}
+
+// Remove every other bang whose primary trigger is claimed by a custom bang.
+// The selected override target is preserved, and its index is adjusted when
+// removals occur before it
+db_remove_primary_trigger_conflicts :: proc(
+	db: ^Bang_DB,
+	trigger: string,
+	keep_index: int,
+) -> int {
+	keep := keep_index
+	index := 0
+
+	for index < len(db.data) {
+		if index == keep {
+			index += 1
+			continue
+		}
+
+		if strings.equal_fold(db.data[index].trigger, trigger) {
+			db_remove_bang_at(db, index)
+			if index < keep do keep -= 1
+			continue
+		}
+
+		index += 1
+	}
+
+	return keep
+}
+
+// Remove the custom bang's claimed primary trigger and aliases from every other
+// bang's alias list
 db_claim_custom_keys :: proc(db: ^Bang_DB, owner_index: int, custom: ^Bang) {
 	for index in 0 ..< len(db.data) {
 		if index == owner_index do continue
@@ -196,13 +242,14 @@ db_append_bang_clone :: proc(db: ^Bang_DB, source: ^Bang) -> int {
 	return new_index
 }
 
-// Merge config bangs over the loaded Kagi database. A matching name or primary
-// trigger overrides the existing bang. Unique custom bangs are appended. After
-// each merge, the custom bang claims its configured trigger/aliases by removing
-// those values from every other bang's alias list
+// Merge custom bangs over the loaded database. Matching precedence is name,
+// primary trigger, then alias. A custom primary trigger removes any competing
+// primary-trigger owner before the selected bang is overridden or appended
 merge_custom_bangs :: proc(db: ^Bang_DB, custom_bangs: []Bang) {
 	for &custom in custom_bangs {
 		index := find_bang_override_index(db.data[:], &custom)
+		index = db_remove_primary_trigger_conflicts(db, custom.trigger, index)
+
 		if index >= 0 {
 			bang_apply_override(&db.data[index], &custom)
 		} else {
