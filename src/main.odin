@@ -74,16 +74,25 @@ main :: proc() {
 
 		url, resolved := resolve_bang(db.data[:], runner_input)
 		if !resolved {
-			b, ok := terminal_get_bang(db.data[:], "!g")
+			if len(config.default_bounce_bang) == 0 {
+				fmt.eprintfln(
+					"Could not resolve runner output: %s\nSet 'default_bounce_bang' inside config, to redirect instead of abort",
+					runner_input,
+				)
+				return
+			}
+
+			cbang := ensure_prefix_allocated(config.default_bounce_bang)
+			defer delete_string(cbang)
+
+			b, ok := terminal_get_bang(db.data[:], cbang)
 			if !ok do fmt.eprintfln("Could not resolve runner output: %s", runner_input)
 
-			//TODO: Hook this default to Google Search behaviour into some config flag
 			url = resolve_template(b.template, runner_input)
+			defer delete_string(url)
+
 			open_url(url)
-			delete_string(url)
 			return
-			// fmt.eprintfln("Could not resolve runner output: %s", runner_input)
-			// return
 		}
 		defer delete_string(url)
 

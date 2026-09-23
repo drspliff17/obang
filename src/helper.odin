@@ -41,6 +41,13 @@ Zsh completion:
 	)
 }
 
+// Returns either a clone of input string, if prefixed, else a prefixed clone
+ensure_prefix_allocated :: proc(s: string, prefix: string = "!") -> string {
+	config := cast(^Config)context.user_ptr
+	str :=
+		strings.has_prefix(config.default_bounce_bang, "!") ? strings.clone(config.default_bounce_bang) : strings.concatenate({"!", config.default_bounce_bang})
+	return str
+}
 
 // Open a url in browser, optionally reusing a new tab, instead of a new window
 open_url :: proc(url: string, new_tab: bool = false) -> bool {
