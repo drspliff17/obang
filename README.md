@@ -1,21 +1,21 @@
 # obang
 
-`obang` is a small Odin utility for resolving browser bangs outside the browser
+`obang` is a small Odin utility for resolving browser bangs, outside of the browser
 
 It uses the [Kagi bangs](https://github.com/kagisearch/bangs) database as its main
 source, with support for layering external bang files and inline custom bangs
 on top
 
 Bangs can be resolved directly from the terminal, passed through a launcher such
-as Wofi, searched or browsed interactively, or printed as resolved URLs for use
-in external scripts, other tools and so on
+as Wofi, searched and/or browsed interactively, or printed as resolved URLs for
+use in external scripts, tooling and so on
 
 ## Features
 
 - Kagi bangs as the default bang source
 - Optional Kagi-free mode
 - Local cached bang database
-- Custom bangs and overrides via external json bang files
+- Custom bangs and overrides via external json files or inline configuration
 - Deterministic merge precedence
 - Trigger and alias claiming between custom and existing bangs
 - Configurable bang prefix
@@ -49,6 +49,7 @@ custom.bangs
 
 Later sources override earlier ones, so inline `custom.bangs` are always the
 final authority
+
 If `disable_kagi_bangs` is enabled, the Kagi layer is skipped entirely:
 
 ```text
@@ -137,8 +138,8 @@ so the runner command does not need to be supplied each time
 obang browse wofi --dmenu --prompt obang
 ```
 
-Browse mode provides searchable bang, category, and subcategory menus.
-Cancelling a nested selection moves back to the previous menu.
+Browse mode provides searchable bang, category, and subcategory menus
+Cancelling a nested selection moves back to the previous menu
 
 The entire browse session can also be exited with `SIGINT`
 
@@ -314,8 +315,8 @@ The full supported shape is:
 }
 ```
 
-`name`, `trigger`, and `template` are required.
-Everything else is optional.
+`name`, `trigger`, and `template` are required
+Everything else is optional
 
 Triggers and aliases are stored without a bang prefix:
 
@@ -326,26 +327,26 @@ Triggers and aliases are stored without a bang prefix:
 }
 ```
 
-Do not use `"!ghu"` or another configured prefix here.
-Prefixes such as `!` or `@` are only part of user-facing bang syntax.
+Do not use `"!ghu"` or another configured prefix here
+Prefixes such as `!` or `@` are only part of user-facing bang syntax
 
 ### Overrides
 
 A custom bang can override an existing loaded bang by matching its name or
-primary trigger.
+primary trigger
 
-Optional fields only replace the existing value when supplied by the custom bang.
-This makes small overrides possible without copying the entire existing entry.
+Optional fields only replace the existing value when supplied by the custom bang
+This makes small overrides possible without copying the entire existing entry
 
-Custom trigger ownership is authoritative.
+Custom trigger ownership is authoritative
 If a custom bang claims a primary trigger already used by another loaded bang,
-the conflicting entry is removed.
+the conflicting entry is removed
 If it claims an alias used by another bang, that alias is removed from the other
-entry.
+entry
 
-Aliases have three useful behaviours
+Aliases have the following three useful behaviours:
 
-Omitting `triggers` keeps the existing aliases:
+- Omitting `triggers` keeps the existing aliases
 
 ```json
 {
@@ -355,13 +356,13 @@ Omitting `triggers` keeps the existing aliases:
 }
 ```
 
-Supplying `triggers` replaces the existing aliases:
+- Supplying `triggers` replaces the existing aliases
 
 ```json
 "triggers": ["wiki"]
 ```
 
-An explicitly empty list removes all aliases:
+- An explicitly empty list removes all aliases
 
 ```json
 "triggers": []
@@ -372,7 +373,7 @@ alias from resolving to multiple entries
 
 ## External bang files
 
-Large custom bang collections do not need to live directly inside `config.json`.
+Large custom bang collections do not need to live directly inside `config.json`
 
 Reference them using `custom.files`:
 
@@ -388,7 +389,7 @@ Reference them using `custom.files`:
 }
 ```
 
-Each referenced file contains a plain json array of bang objects:
+Each referenced file should contain a plain json array of bang objects:
 
 ```json
 [
@@ -416,15 +417,17 @@ Paths may be absolute, home-relative, or relative to the `obang` config director
 bangs/example.json
 ```
 
-Referenced files are validated at startup.
+Referenced files are validated at startup
+
 Invalid paths, unreadable files, malformed json, or bangs missing required fields
 cause startup to fail rather than silently producing a partial database
 
 ## Bang prefixes
 
-Internally, bang resolution always uses the canonical `!` prefix.
+Internally, bang resolution always uses the canonical `!` prefix
 
-`alternate_prefix` only changes the user-facing syntax.
+`alternate_prefix` only changes the user-facing syntax
+
 For example:
 
 ```json
@@ -453,7 +456,7 @@ an unprefixed input such as:
 yt cats
 ```
 
-is first treated as though the configured bang prefix had been supplied.
+is first treated as though the configured bang prefix had been supplied
 If it does not resolve as a bang, runner mode can still fall back through
 `default_bounce_bang` (when set to a valid bang trigger)
 
@@ -466,7 +469,7 @@ For a completely custom database:
 ```
 
 Kagi bangs will not be loaded whilst external files and inline custom
-bangs continue to work normally.
+bangs continue to work normally
 
 If this leaves the database empty, `obang` exits with an error
 
@@ -480,8 +483,9 @@ Each browse stage can use its own runner command:
 - `browse_category_runner_cmd` — category selection
 - `browse_subcategory_runner_cmd` — subcategory selection
 
-This allows each Wofi, Rofi, dmenu, or any other compatible program to use
-its own dimensions, prompt, styling, and so on.
+This allows runner programs, i.e. Wofi, Rofi, dmenu (or any other stdin/stdout menu
+compatible program) to be provided it's own arguments for dimensions, prompt,
+styling, and so on
 
 ## Shell completions
 
@@ -525,12 +529,12 @@ compinit
 {{{s}}}
 ```
 
-It also supports `$1`, `$2`, ... placeholders.
+It also supports `$1`, `$2`, ... placeholders
 
-When `regex_pattern` is defined, these are populated from regex capture groups.
+When `regex_pattern` is defined, these are populated from regex capture groups
 
 Without a regex pattern, they are populated from space-separated query parts,
-with the final placeholder receiving the remainder of the query.
+with the final placeholder receiving the remainder of the query
 
 Supported formatting flags:
 
@@ -549,7 +553,7 @@ These control query encoding and empty-query behaviour:
 - `open_base_path` — when no query is supplied, open the bang's base domain
 
 If `format` is omitted or `null`, all formatting flags are treated as enabled
-by default.
+by default
 
 To disable a specific behaviour, provide an explicit `format` array containing
 only the flags you want
@@ -574,18 +578,38 @@ An empty array disables all optional formatting behaviour:
 ## Why obang?
 
 Browser-native bangs are convenient, but they tie bang resolution to a browser's
-address bar.
+address bar
 
 `obang` moves that resolution into a small standalone tool, making bangs usable
 from launchers, shell scripts, keybindings, desktop workflows, and anything else
-that can invoke a command.
+that can invoke a command
 
 The goal is simple: keep the convenience of bangs, but make them available
-everywhere.
+everywhere
+
+## License
+
+`obang` is released under the [MIT License](LICENSE)
+
+You are free to use, modify, distribute and fork the project, including for
+commercial purposes, provided the original copyright and license notices
+are retained
+
+The `obang` source and binary do not bundle the Kagi bang database
+Instead, the database is downloaded and normalized locally at runtime
 
 ## Credits
 
 The default bang database comes from the
-[Kagi bangs project](https://github.com/kagisearch/bangs)
+[Kagi bangs project](https://github.com/kagisearch/bangs),
+Copyright (c) 2024 Kagi Search and licensed under the
+[Kagi MIT License](https://github.com/kagisearch/bangs/blob/main/LICENSE)
+
+When Kagi bangs are enabled, `obang` clones the original repository into
+`~/.cache/obang/kagi-bangs/`, retaining its `LICENSE` file, and generates a
+separate normalized cache at `~/.cache/obang/bangs.json`
+
+If you redistribute Kagi's bang data or the normalized cache, include Kagi's
+copyright and license notice with that distribution
 
 `obang` is not affiliated with Kagi
